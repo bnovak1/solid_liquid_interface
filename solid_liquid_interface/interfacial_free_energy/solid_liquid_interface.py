@@ -169,7 +169,7 @@ def find_interfacial_atoms_1D(x, height, coords, traj_file, snapshot, interface_
 
 def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, vectors_ref,
                            tree_ref, X, Y, Z, smoothing_cutoff, crossover, interface_options,
-                           outfile_prefix, psi_avg_flag):
+                           outfile_prefix, psi_avg_flag=False, reduce_flag=True):
 
     natoms = coords.shape[0]
     nx_grid = X.shape[0]
@@ -285,26 +285,28 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
             fit = np.polyfit(psi[ix, iy, ind_crossing], psi_grid[ix, iy, ind_crossing, 2], 1)
             height[ix, iy, 1] = fit[0]*crossover + fit[1]
 
-    hmin = np.min(np.min(height, axis=0), axis=0)
-    hmax = np.max(np.max(height, axis=0), axis=0)
-    try:
-        interface_positions_2D.hrng_half = max(interface_positions_2D.hrng_half,
-                                               1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam)
-    except AttributeError:
-        interface_positions_2D.hrng_half = 1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam
+    if reduce_flag:
 
-    hmean = np.mean(np.mean(height, axis=0), axis=0)
+        hmin = np.min(np.min(height, axis=0), axis=0)
+        hmax = np.max(np.max(height, axis=0), axis=0)
+        try:
+            interface_positions_2D.hrng_half = max(interface_positions_2D.hrng_half,
+                                                   1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam)
+        except AttributeError:
+            interface_positions_2D.hrng_half = 1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam
 
-    interface_positions_2D.interface_range = \
-        np.column_stack((hmean - interface_positions_2D.hrng_half,
-                         hmean + interface_positions_2D.hrng_half))
+        hmean = np.mean(np.mean(height, axis=0), axis=0)
+
+        interface_positions_2D.interface_range = \
+            np.column_stack((hmean - interface_positions_2D.hrng_half,
+                             hmean + interface_positions_2D.hrng_half))
 
     return height
 
 
 def interface_positions_1D(coords, box_sizes, snapshot, n_neighbors, latparam, vectors_ref,
                            tree_ref, X, Z, smoothing_cutoff, crossover, interface_options,
-                           outfile_prefix, psi_avg_flag):
+                           outfile_prefix, psi_avg_flag=False, reduce_flag=True):
 
     natoms = snapshot.n_atoms
     nx_grid = X.shape[0]
@@ -422,19 +424,21 @@ def interface_positions_1D(coords, box_sizes, snapshot, n_neighbors, latparam, v
         fit = np.polyfit(psi[ix, ind_crossing], psi_grid[ix, ind_crossing, 1], 1)
         height[ix, 1] = fit[0]*crossover + fit[1]
 
-    hmin = np.min(height, axis=0)
-    hmax = np.max(height, axis=0)
-    try:
-        interface_positions_1D.hrng_half = max(interface_positions_1D.hrng_half,
-                                               1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam)
-    except AttributeError:
-        interface_positions_1D.hrng_half = 1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam
+    if reduce_flag:
 
-    hmean = np.mean(height, axis=0)
+        hmin = np.min(height, axis=0)
+        hmax = np.max(height, axis=0)
+        try:
+            interface_positions_1D.hrng_half = max(interface_positions_1D.hrng_half,
+                                                   1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam)
+        except AttributeError:
+            interface_positions_1D.hrng_half = 1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam
 
-    interface_positions_1D.interface_range = \
-        np.column_stack((hmean - interface_positions_1D.hrng_half,
-                         hmean + interface_positions_1D.hrng_half))
+        hmean = np.mean(height, axis=0)
+
+        interface_positions_1D.interface_range = \
+            np.column_stack((hmean - interface_positions_1D.hrng_half,
+                             hmean + interface_positions_1D.hrng_half))
 
     return height
 
