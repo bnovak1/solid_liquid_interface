@@ -1,0 +1,97 @@
+log             ../output/[TEMP]K/solidification_[ORIENTATION]_[RUN_NUM].log
+
+units           metal
+atom_style      atomic
+atom_modify     map array
+
+read_restart       [RESTART_FILE]
+
+# groups
+variable        solidbound1 equal [LATPARAM]
+variable        solidbound2 equal lz-[LATPARAM]
+
+region          lower_boundary block EDGE EDGE EDGE EDGE EDGE ${solidbound1} units box
+region          upper_boundary block EDGE EDGE EDGE EDGE ${solidbound2} EDGE units box
+
+group           boundary union lower_boundary upper_boundary
+group           nonboundary subtract all boundary
+
+# Scale box lengths in interface tangential directions
+# Create free boundaries in z direction with small gaps to prevent lost atoms
+variable        zupper1 equal lz+3.0
+variable        zupper2 equal lz+6.0
+change_box      all x final 0.0 [BOXX] &
+                    y final 0.0 [BOXY] &
+                    z final 3.0 ${zupper1} remap &
+                    z final 0.0 ${zupper2} &
+                    boundary p p f &
+                    units box
+
+# potential
+include         potential.in
+
+neigh_modify    delay 0 check yes
+
+# Time step
+timestep        [TIMESTEP]
+
+# Random seed
+variable        seed equal "2026561 + [RUN_NUM]"
+
+# Solidification
+variable        nsteps equal round(600/dt)
+
+velocity        all create [TEMP] ${seed} dist gaussian
+velocity        boundary set 0.0 0.0 NULL
+velocity        nonboundary zero linear
+
+fix             favebottom lower_boundary aveforce 0.0 0.0 NULL
+compute         bottomtemp lower_boundary temp/partial 0 0 1
+fix             bottomthermostat lower_boundary langevin [TEMP] [TEMP] 0.1 ${seed} zero yes
+fix_modify      bottomthermostat temp bottomtemp
+
+fix             favetop upper_boundary aveforce 0.0 0.0 NULL
+compute         toptemp upper_boundary temp/partial 0 0 1
+fix             topthermostat upper_boundary langevin [TEMP] [TEMP] 0.1 ${seed} zero yes
+fix_modify      topthermostat temp toptemp
+
+variable         binwidth equal lz/[N_TEMP_BINS]
+
+label           thermostatloop
+variable        ithermostat loop [N_TEMP_BINS]
+
+    variable         boundary1 equal (${ithermostat}-1)*${binwidth}
+    variable         boundary2 equal ${ithermostat}*${binwidth}
+
+    region          region${ithermostat} block EDGE EDGE EDGE EDGE &
+                                               ${boundary1} ${boundary2} units box
+
+    compute         temp${ithermostat} nonboundary temp/region region${ithermostat}
+
+    fix             thermostat${ithermostat} nonboundary temp/rescale 1 [TEMP] [TEMP] 1.0 1.0
+    fix_modify      thermostat${ithermostat} temp temp${ithermostat}
+
+next            ithermostat
+jump            SELF thermostatloop
+
+fix             zeromom1 lower_boundary momentum 1 linear 1 1 0 rescale
+fix             zeromom2 upper_boundary momentum 1 linear 1 1 0 rescale
+fix             zeromom3 all momentum 1 linear 1 1 1 rescale
+fix             integrate all nve
+
+# Thermo output
+compute         tempnb nonboundary temp
+
+thermo          25
+thermo_style    custom time pe temp c_bottomtemp c_tempnb c_toptemp
+
+variable        nstepstraj equal round(2.0/dt)
+dump            solidify all atom ${nstepstraj} &
+                     ../output/[TEMP]K/solidification_[ORIENTATION]_[RUN_NUM].lammpstrj
+dump_modify     solidify image yes
+
+restart         ${nstepstraj} &
+                ../output/[TEMP]K/solidification_[ORIENTATION]_[RUN_NUM].restart &
+                ../output/[TEMP]K/solidification_[ORIENTATION]_[RUN_NUM].restart
+
+run             [NSTEPS]

@@ -1,0 +1,23 @@
+{
+    "traj_dir": "traj-Ti_2D",
+    "reference_prefix": "reference_solid_Ti",
+    "traj_pattern": "frame.*.lammpstrj",
+    "traj_top_file": "Ti.pdb",
+    "temp": 1716.0,
+    "latparam": 3.325,
+    "n_neighbors": 14,
+    "smoothing_cutoff": 8.3125,
+    "crossover": 0.086285,
+    "outfile_prefix": "stiffness_100_001-2",
+    "psi_avg_flag": false,
+    "dimension": 2,
+    "interface_options": {
+        "traj_flag": true,
+        "conc_flag": false,
+        "r_atoms": {"Ti": 1.439725},
+        "r_probe": 1.439725,
+        "grid_spacing": 0.1,
+        "n_layers": 1
+    },
+    "nthreads": 1
+}
