@@ -13,7 +13,6 @@ standard_library.install_aliases()
 
 import mdtraj
 import numpy as np
-import pytim
 import scipy.spatial as ss
 import scipy.fftpack as fft
 import scipy.interpolate as interp
@@ -37,7 +36,7 @@ def get_ref_vectors(n_neighbors, reference_structure, topfile):
     tree = ss.cKDTree(coords)
 
     # Find neighbors of center atom
-    (neighbor_distances, neighbors) = tree.query(coords[ center_ind, :], n_neighbors+1)
+    (neighbor_distances, neighbors) = tree.query(coords[center_ind, :], n_neighbors+1)
 
     # Vectors from center atom to its neighbors
     vectors_ref = coords[neighbors[1:], :] - coords[neighbors[0], :]
@@ -85,17 +84,20 @@ def interface_concentrations(snapshot, interfaces, interface_options):
     atom_name_list = interface_options['atom_name_list']
     n_names = len(atom_name_list)
 
-    concs = np.zeros(n_names*n_layers*2*2)
+    # Lower and upper don't have the same definition in pytim for the different phases
+    interface_list = {0: [1, 0], 1: [0, 1]}
+
+    concs = np.zeros((n_names-1)*n_layers*2*2)
 
     cnt = 0
-    for iint in range(2):
-        for ilayer in range(n_layers):
-            for iphase in range(2):
+    for ilayer in range(n_layers):
+        for iphase in range(2):
+            for iint in interface_list[iphase]:
 
                 ind = interfaces[iphase].layers[iint, ilayer].indices
                 natoms = len(ind)
 
-                for iname in range(n_names):
+                for iname in range(n_names-1):
 
                     concs[cnt] = np.sum(atom_names[ind] == \
                                         atom_name_list[iname])/natoms
@@ -104,7 +106,9 @@ def interface_concentrations(snapshot, interfaces, interface_options):
     return concs
 
 
-def itim(snapshot, phase_atoms, interface_options):
+def itim(snapshot, coords, phase_atoms, interface_options):
+
+    import pytim
 
     r_probe = interface_options['r_probe']
     r_atoms = interface_options['r_atoms']
@@ -113,12 +117,24 @@ def itim(snapshot, phase_atoms, interface_options):
 
     interfaces = np.empty(2, dtype=object)
 
-    for iphase in range(2):
+    # Remove extra space from box so pytim can find the correct interfaces
+    if interface_options['free_boundaries']:
+        shift = np.min(snapshot.xyz[0][:, 2])
+        snapshot.xyz[0][:, 2] -= shift
+        box_shift = snapshot.unitcell_lengths[0][2] - np.max(snapshot.xyz[0][:, 2])
+        snapshot.unitcell_lengths[0][2] -= box_shift
 
+    # Find interfacial atoms
+    for iphase in range(2):
         interfaces[iphase] = pytim.ITIM(snapshot, group=phase_atoms[iphase],
                                         normal='z', molecular=False, alpha=r_probe,
                                         radii_dict=r_atoms, mesh=grid_spacing,
                                         max_layers=n_layers)
+
+    # Change box back
+    if interface_options['free_boundaries']:
+        snapshot.unitcell_lengths[0][2] += box_shift
+        snapshot.xyz[0][:, 2] += shift
 
     return interfaces
 
@@ -140,7 +156,7 @@ def find_interfacial_atoms_2D(x, y, height, coords, traj_file, snapshot, interfa
     phase_atoms[1] = np.setxor1d(phase_atoms[0], range(coords.shape[0]))
 
     # Interfacial atoms
-    interfaces = itim(snapshot, phase_atoms, interface_options)
+    interfaces = itim(snapshot, coords, phase_atoms, interface_options)
 
     return interfaces
 
@@ -162,7 +178,7 @@ def find_interfacial_atoms_1D(x, height, coords, traj_file, snapshot, interface_
     phase_atoms[1] = np.setxor1d(phase_atoms[0], range(coords.shape[0]))
 
     # Interfacial atoms
-    interfaces = itim(snapshot, phase_atoms, interface_options)
+    interfaces = itim(snapshot, coords, phase_atoms, interface_options)
 
     return interfaces
 
@@ -174,12 +190,6 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
     natoms = coords.shape[0]
     nx_grid = X.shape[0]
     ny_grid = X.shape[1]
-
-    # Apply periodic boundary conditions to insure all coordinates are in [0, box_size].
-    # This is required for the k-d tree algorithm with periodic boundary conditions.
-    # k-d tree cannot have coordinates exactly at upper boundary, shift to lower boundary
-    coords -= box_sizes*np.floor(coords/box_sizes)
-    coords -= box_sizes*(coords == box_sizes)
 
     # Keep only coordinates and grid points near interfaces
     try:
@@ -250,15 +260,26 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
     psi = (np.sum(wd*phi[ii], axis=1)/np.sum(wd, axis=1)).reshape(nx_grid, ny_grid, nz_grid)/(latparam**2)
     del wd, ii
 
-    # Save phi and psi from 1 frame for plotting
-    # try:
-    #     interface_positions_2D.save_flag = False
-    # except AttributeError:
-    #     ind = np.where(np.abs(coords[:, 0] - psi_grid[nz_grid, 0]) < latparam/4.0)[0]
-    #     outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
-    #     np.savetxt(outfile_prefix + '_phi.dat', outdata)
-    #     outdata = np.column_stack((psi_grid[nz_grid:2*nz_grid, 1], psi[1, :]))
-    #     np.savetxt(outfile_prefix + '_psi.dat', outdata)
+    # Save phi and psi from 1 frame and 1 grid point for plotting
+    try:
+        if interface_positions_2D.save_flag:
+            ind = np.intersect1d(np.where(psi_grid[:, 0] > 0)[0],
+                                 np.where(psi_grid[:, 1] > 0)[0])
+            grid_point = psi_grid[ind[0], :2]
+
+            ind = (psi_grid[:, 0] == grid_point[0])*(psi_grid[:, 1] == grid_point[1])
+            outdata = np.column_stack((psi_grid[ind, 2],
+                                       psi.reshape(nx_grid*ny_grid*nz_grid, -1)[ind]))
+            np.savetxt(outfile_prefix + '_psi.dat', outdata)
+
+            ind = (np.abs(coords[:, 0] - grid_point[0]) < latparam/4.0)* \
+                  (np.abs(coords[:, 1] - grid_point[1]) < latparam/4.0)
+            outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
+            np.savetxt(outfile_prefix + '_phi.dat', outdata)
+
+            interface_positions_2D.save_flag = False
+    except AttributeError:
+        interface_positions_2D.save_flag = True
 
     # Return mean value of psi
     if psi_avg_flag:
@@ -392,13 +413,15 @@ def interface_positions_1D(coords, box_sizes, snapshot, n_neighbors, latparam, v
 
     # Save phi and psi from 1 frame for plotting
     try:
-        interface_positions_1D.save_flag = False
+        if interface_positions_1D.save_flag:
+            ind = np.where(np.abs(coords[:, 0] - psi_grid[nz_grid, 0]) < latparam/4.0)[0]
+            outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
+            np.savetxt(outfile_prefix + '_phi.dat', outdata)
+            outdata = np.column_stack((psi_grid[nz_grid:2*nz_grid, 1], psi[1, :]))
+            np.savetxt(outfile_prefix + '_psi.dat', outdata)
+            interface_positions_1D.save_flag = False
     except AttributeError:
-        ind = np.where(np.abs(coords[:, 0] - psi_grid[nz_grid, 0]) < latparam/4.0)[0]
-        outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
-        np.savetxt(outfile_prefix + '_phi.dat', outdata)
-        outdata = np.column_stack((psi_grid[nz_grid:2*nz_grid, 1], psi[1, :]))
-        np.savetxt(outfile_prefix + '_psi.dat', outdata)
+        interface_positions_1D.save_flag = True
 
     # Return mean value of psi
     if psi_avg_flag:
