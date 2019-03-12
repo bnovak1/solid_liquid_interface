@@ -13,11 +13,13 @@ standard_library.install_aliases()
 
 import mdtraj
 import numpy as np
+import pandas as pd
 import scipy.spatial as ss
 import scipy.fftpack as fft
 import scipy.interpolate as interp
 import scipy.constants as constants
 import subprocess
+import time
 
 
 def get_ref_vectors(n_neighbors, reference_structure, topfile):
@@ -62,7 +64,7 @@ def save_pdb(traj_file, coords, snapshot, interface_options, interfaces):
 
                 for iphase in range(2):
 
-                    ind = interfaces[iphase].layers[iint, ilayer].indices
+                    ind = interfaces[iint, iphase, ilayer]
                     bfactors[ind] = beta + iphase*n_layers
 
                 beta += 1.0
@@ -79,22 +81,19 @@ def save_pdb(traj_file, coords, snapshot, interface_options, interfaces):
 
 def interface_concentrations(snapshot, interfaces, interface_options):
 
-    n_layers = interfaces[0].layers.shape[1]
+    n_layers = interfaces.shape[2]
     atom_names = interface_options['atom_names']
     atom_name_list = interface_options['atom_name_list']
     n_names = len(atom_name_list)
-
-    # Lower and upper don't have the same definition in pytim for the different phases
-    interface_list = {0: [1, 0], 1: [0, 1]}
 
     concs = np.zeros((n_names-1)*n_layers*2*2)
 
     cnt = 0
     for ilayer in range(n_layers):
         for iphase in range(2):
-            for iint in interface_list[iphase]:
+            for iint in range(2):
 
-                ind = interfaces[iphase].layers[iint, ilayer].indices
+                ind = interfaces[iint, iphase, ilayer]
                 natoms = len(ind)
 
                 for iname in range(n_names-1):
@@ -110,10 +109,10 @@ def itim(snapshot, coords, phase_atoms, interface_options):
 
     import pytim
 
-    r_probe = interface_options['r_probe']
     r_atoms = interface_options['r_atoms']
-    grid_spacing = interface_options['grid_spacing']
-    n_layers = interface_options['n_layers']
+    r_probe = interface_options['ITIM']['r_probe']
+    grid_spacing = interface_options['ITIM']['grid_spacing']
+    n_layers = interface_options['ITIM']['n_layers']
 
     interfaces = np.empty(2, dtype=object)
 
@@ -126,8 +125,8 @@ def itim(snapshot, coords, phase_atoms, interface_options):
 
     # Find interfacial atoms
     for iphase in range(2):
-        interfaces[iphase] = pytim.ITIM(snapshot, group=phase_atoms[iphase],
-                                        normal='z', molecular=False, alpha=r_probe,
+        interfaces[iphase] = pytim.ITIM(snapshot, group=phase_atoms[iphase], normal='z',
+                                        molecular=False, alpha=r_probe,
                                         radii_dict=r_atoms, mesh=grid_spacing,
                                         max_layers=n_layers)
 
@@ -136,10 +135,67 @@ def itim(snapshot, coords, phase_atoms, interface_options):
         snapshot.unitcell_lengths[0][2] += box_shift
         snapshot.xyz[0][:, 2] += shift
 
+    # Get lists instead of MDAnalysis objects
+    interface_atoms = np.empty((2, 2, n_layers), dtype=object)
+
+    cnt = 0
+    for ilayer in range(n_layers):
+        for iphase in range(2):
+
+            if iphase==0:
+    	        interface_atoms[0, iphase, ilayer] = \
+                    interfaces[iphase].layers[0, ilayer].indices
+    	        interface_atoms[1, iphase, ilayer] = \
+                    interfaces[iphase].layers[1, ilayer].indices
+            else:
+    	        interface_atoms[0, iphase, ilayer] = \
+                    interfaces[iphase].layers[1, ilayer].indices
+    	        interface_atoms[1, iphase, ilayer] = \
+                    interfaces[iphase].layers[0, ilayer].indices
+
+    return interface_atoms
+
+
+def find_interfacial_atoms_2D_nearest(x, y, height, coords, traj_file, snapshot,
+                                      interface_options, latparam):
+
+    x_new = np.linspace(x[0], x[-1], 125)
+    x_new = x_new[:-1]+1.0e-15
+    y_new = np.linspace(y[0], y[-1], 125)
+    y_new = y_new[:-1]+1.0e-15
+    (X, Y) = np.meshgrid(x_new, y_new)
+
+    interfaces = np.empty((2, 2, 1), dtype=object)
+
+    for iint in range(2):
+
+        z_interp = interp.RectBivariateSpline(x, y, height[:, :, iint])
+        interface_positions = z_interp.ev(X, Y)
+
+        atoms = np.intersect1d(np.where(coords[:, 2] > np.min(height[:, :, iint]) - 2.0*latparam)[0],
+                               np.where(coords[:, 2] < np.max(height[:, :, iint]) + 2.0*latparam)[0])
+        natoms = len(atoms)
+
+        pnts = np.vstack((coords[atoms, :], np.column_stack((X.flatten(), Y.flatten(),
+                                                   interface_positions.flatten()))))
+
+        tree_int = ss.cKDTree(pnts, boxsize=snapshot.unitcell_lengths*10.0)
+        (_, first_neighbor) = tree_int.query(coords[atoms, :], [2])
+
+        interface_atoms = atoms[first_neighbor.flatten() >= natoms]
+        interface_positions = z_interp.ev(coords[interface_atoms, 0],
+                                          coords[interface_atoms, 1])
+
+        interfaces[iint, int((-(-1)**iint + 1)/2), 0] = \
+            interface_atoms[coords[interface_atoms, 2] < interface_positions]
+        interfaces[iint, int(((-1)**iint + 1)/2), 0] = \
+            interface_atoms[coords[interface_atoms, 2] > interface_positions]
+
     return interfaces
 
 
-def find_interfacial_atoms_2D(x, y, height, coords, traj_file, snapshot, interface_options):
+def find_interfacial_atoms_2D_itim(x, y, height, coords, traj_file, snapshot,
+                                   interface_options):
 
     # Split phases
     phase_atoms = np.empty(2, dtype=object)
@@ -154,6 +210,7 @@ def find_interfacial_atoms_2D(x, y, height, coords, traj_file, snapshot, interfa
                                 np.where(coords[:, 2] > interface_positions)[0]))
 
     phase_atoms[1] = np.setxor1d(phase_atoms[0], range(coords.shape[0]))
+
 
     # Interfacial atoms
     interfaces = itim(snapshot, coords, phase_atoms, interface_options)

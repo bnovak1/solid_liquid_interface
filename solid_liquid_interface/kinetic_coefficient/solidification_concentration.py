@@ -1,5 +1,5 @@
 # added by pasteurize
-#########################################################################################
+########################################################################################
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
@@ -11,8 +11,8 @@ from future import standard_library
 standard_library.install_aliases()
 #########################################################################################
 
-import mdtraj
 from joblib import Parallel, delayed, cpu_count
+import mdtraj
 import numpy as np
 import pandas as pd
 import scipy.constants as constants
@@ -73,11 +73,6 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
     # Find interface atoms
     if interface_options['interface_flag']:
 
-        # With free boundaries, get rid of empty space at top of box.
-        # This allows pytim to correctly identify interfaces w/ smaller interface spacing
-        # if interface_options['free_boundaries']:
-        #    snapshot.unitcell_lengths[0][2] = np.max(coords[:, 2])/10.0
-
         x = np.hstack((np.unique(X), box_sizes[0][0]))
         y = np.hstack((np.unique(Y), box_sizes[0][1]))
 
@@ -87,7 +82,13 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
             h = np.row_stack((h, h[0, :]))
             height_ext[:, :, iint] = h
 
-        interfaces = sli.find_interfacial_atoms_2D(x, y, height_ext, coords, traj_file,
+        if interface_options['algorithm'] == 'nearest':
+            interfaces = \
+                sli.find_interfacial_atoms_2D_nearest(x, y, height_ext, coords, traj_file,
+                                                      snapshot, interface_options, latparam)
+        elif interface_options['algorithm'] == 'ITIM':
+            interfaces = \
+                sli.find_interfacial_atoms_2D_itim(x, y, height_ext, coords, traj_file,
                                                    snapshot, interface_options)
 
     # Save pdb file
@@ -111,6 +112,11 @@ if __name__ == "__main__":
         inputs = json.load(f)
 
     interface_options = inputs['interface_options']
+
+    assert interface_options['algorithm'] == 'ITIM' or \
+           interface_options['algorithm'] == 'nearest', \
+           'Algorithm for finding interfacial atoms must be "ITIM" or "nearest".'
+
     psi_avg_flag = inputs['psi_avg_flag']
 
     interface_options['interface_flag'] = \
@@ -136,7 +142,7 @@ if __name__ == "__main__":
     traj_files = traj_files.decode().split('\n')[:-1]
     nframes = len(traj_files)
 
-    # Read 1 frame atom names
+    # Read 1 frame to get atom names
     snapshot = mdtraj.load_lammpstrj(traj_files[0], top=traj_top_file)
     # box_sizes = 10.0*snapshot.unitcell_lengths
 
@@ -174,6 +180,9 @@ if __name__ == "__main__":
 
     else:
 
+        n_layers = (interface_options['algorithm'] == 'nearest') + \
+                   (interface_options['algorithm'] == 'ITIM')*interface_options['ITIM']['n_layers']
+
         # Combine first and subsequent frame data
         if interface_options['conc_flag']:
 
@@ -185,9 +194,9 @@ if __name__ == "__main__":
 
             # Save concentrations to file
             cols = ['frame']
-            for ilayer in range(interface_options['n_layers']):
+            for ilayer in range(n_layers):
                 for phase in ['E', 'C']:
-                    for interface in ['U', 'L']:
+                    for interface in ['L', 'U']:
                         for iname in range(n_names-1):
                             code = interface + str(ilayer) + phase + \
                                    interface_options['atom_name_list'][iname]
