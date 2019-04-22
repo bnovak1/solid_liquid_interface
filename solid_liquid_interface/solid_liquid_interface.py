@@ -19,7 +19,6 @@ import scipy.fftpack as fft
 import scipy.interpolate as interp
 import scipy.constants as constants
 import subprocess
-import time
 
 
 def get_ref_vectors(n_neighbors, reference_structure, topfile):
@@ -53,21 +52,19 @@ def save_pdb(traj_file, coords, snapshot, interface_options, interfaces):
 
         natoms = coords.shape[0]
         n_layers = interface_options['n_layers']
-
         bfactors = np.zeros(natoms)
 
         for iint in range(2):
 
-            beta = 1.0
+            beta = 0.0
 
             for ilayer in range(n_layers):
 
-                for iphase in range(2):
-
-                    ind = interfaces[iint, iphase, ilayer]
-                    bfactors[ind] = beta + iphase*n_layers
-
                 beta += 1.0
+
+                ind = interfaces[iint, ilayer]
+                bfactors[ind] = beta
+
 
         traj_prefix = '.'.join(traj_file.split('.')[:-1])
         traj_prefix = traj_prefix.split('/')[-1]
@@ -81,38 +78,39 @@ def save_pdb(traj_file, coords, snapshot, interface_options, interfaces):
 
 def interface_concentrations(snapshot, interfaces, interface_options):
 
-    n_layers = interfaces.shape[2]
+    nbins = interfaces.shape[1]
     atom_names = interface_options['atom_names']
     atom_name_list = interface_options['atom_name_list']
     n_names = len(atom_name_list)
 
-    concs = np.zeros((n_names-1)*n_layers*2*2)
+    concs = np.zeros((n_names-1)*nbins*2)
 
     cnt = 0
-    for ilayer in range(n_layers):
-        for iphase in range(2):
-            for iint in range(2):
+    for ibin in range(nbins):
+        for iint in range(2):
 
-                ind = interfaces[iint, iphase, ilayer]
-                natoms = len(ind)
+            ind = interfaces[iint, ibin]
+            natoms = len(ind)
 
-                for iname in range(n_names-1):
-
-                    concs[cnt] = np.sum(atom_names[ind] == \
-                                        atom_name_list[iname])/natoms
-                    cnt += 1
+            for iname in range(n_names-1):
+                concs[cnt] = np.sum(atom_names[ind] == \
+                                    atom_name_list[iname])/natoms
+                cnt += 1
 
     return concs
 
 
 def itim(snapshot, coords, phase_atoms, interface_options):
+    '''
+    FIX: STILL USES PHASES
+    '''
 
     import pytim
 
     r_atoms = interface_options['r_atoms']
     r_probe = interface_options['ITIM']['r_probe']
     grid_spacing = interface_options['ITIM']['grid_spacing']
-    n_layers = interface_options['ITIM']['n_layers']
+    n_layers = interface_options['n_layers']
 
     interfaces = np.empty(2, dtype=object)
 
@@ -159,37 +157,36 @@ def itim(snapshot, coords, phase_atoms, interface_options):
 def find_interfacial_atoms_2D_nearest(x, y, height, coords, traj_file, snapshot,
                                       interface_options, latparam):
 
-    x_new = np.linspace(x[0], x[-1], 125)
-    x_new = x_new[:-1]+1.0e-15
-    y_new = np.linspace(y[0], y[-1], 125)
-    y_new = y_new[:-1]+1.0e-15
-    (X, Y) = np.meshgrid(x_new, y_new)
+    n_layers = interface_options['n_layers']
+    nbins_per_layer = interface_options['nbins_per_layer']
+    nbins = (n_layers - 1)*nbins_per_layer + 1
 
-    interfaces = np.empty((2, 2, 1), dtype=object)
+    interfaces = np.empty((2, nbins), dtype=object)
+
+    bin_width = np.max(list(interface_options['r_atoms'].values()))
 
     for iint in range(2):
 
         z_interp = interp.RectBivariateSpline(x, y, height[:, :, iint])
-        interface_positions = z_interp.ev(X, Y)
 
-        atoms = np.intersect1d(np.where(coords[:, 2] > np.min(height[:, :, iint]) - 2.0*latparam)[0],
-                               np.where(coords[:, 2] < np.max(height[:, :, iint]) + 2.0*latparam)[0])
-        natoms = len(atoms)
+        atoms = np.intersect1d(np.where(coords[:, 2] > np.min(height[:, :, iint]) - \
+                                        bin_width*n_layers/2.0)[0],
+                               np.where(coords[:, 2] < np.max(height[:, :, iint]) + \
+                                        bin_width*n_layers/2.0)[0])
 
-        pnts = np.vstack((coords[atoms, :], np.column_stack((X.flatten(), Y.flatten(),
-                                                   interface_positions.flatten()))))
+        interface_projections = z_interp.ev(coords[atoms, 0], coords[atoms, 1])
 
-        tree_int = ss.cKDTree(pnts, boxsize=snapshot.unitcell_lengths*10.0)
-        (_, first_neighbor) = tree_int.query(coords[atoms, :], [2])
+        for ibin in range(nbins):
 
-        interface_atoms = atoms[first_neighbor.flatten() >= natoms]
-        interface_positions = z_interp.ev(coords[interface_atoms, 0],
-                                          coords[interface_atoms, 1])
+            lower_shift = -bin_width*(n_layers/2.0 - ibin/nbins_per_layer)
+            upper_shift = lower_shift + bin_width
 
-        interfaces[iint, int((-(-1)**iint + 1)/2), 0] = \
-            interface_atoms[coords[interface_atoms, 2] < interface_positions]
-        interfaces[iint, int(((-1)**iint + 1)/2), 0] = \
-            interface_atoms[coords[interface_atoms, 2] > interface_positions]
+            ind = np.intersect1d(np.where(coords[atoms, 2] > interface_projections + lower_shift)[0],
+                                 np.where(coords[atoms, 2] < interface_projections + upper_shift)[0])
+
+            interfaces[iint, ibin] = atoms[ind]
+
+    interfaces[1, :] = interfaces[1, ::-1]
 
     return interfaces
 
@@ -219,6 +216,9 @@ def find_interfacial_atoms_2D_itim(x, y, height, coords, traj_file, snapshot,
 
 
 def find_interfacial_atoms_1D(x, height, coords, traj_file, snapshot, interface_options):
+    '''
+    FIX: STILL USES PHASES
+    '''
 
     # Split phases
     phase_atoms = np.empty(2, dtype=object)
@@ -267,10 +267,9 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
         Y = Y[ind].reshape(nx_grid, ny_grid, -1)
         Z = Z[ind].reshape(nx_grid, ny_grid, -1)
 
-    except AttributeError:
-        pass
+    except AttributeError: pass
 
-    # List of points in the x-z plane to compute psi on
+    # List of points to compute psi on
     nz_grid = X.shape[2]
     psi_grid = np.vstack((X.flatten(), Y.flatten(), Z.flatten())).T
 

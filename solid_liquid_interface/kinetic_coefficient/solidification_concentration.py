@@ -18,7 +18,17 @@ import pandas as pd
 import scipy.constants as constants
 import json, subprocess, sys
 import solid_liquid_interface as sli
-import time
+
+
+def get_boundary_atoms(coordsz, latparam):
+
+    zmin = np.min(coordsz)
+    boundary_atoms_lower = np.where(coordsz < zmin + latparam/4)[0]
+
+    zmax = np.max(coordsz)
+    boundary_atoms_upper = np.where(coordsz > zmax - latparam/4)[0]
+
+    return (boundary_atoms_lower, boundary_atoms_upper)
 
 
 def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vectors_ref,
@@ -41,6 +51,11 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
     box_sizes = 10.0*snapshot.unitcell_lengths
     coords = 10.0*snapshot.xyz
     coords = coords[0, :, :]
+
+    # Calculate system depth if there are free boundaries
+    if interface_options['free_boundaries']:
+        system_depth = np.mean(coords[interface_options['boundary_atoms_upper'], 2]) - \
+                       np.mean(coords[interface_options['boundary_atoms_lower'], 2])
 
     # Calculate interface positions
     # Must stay away from free boundaries. This limits how little solid can be used to start.
@@ -83,6 +98,7 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
             height_ext[:, :, iint] = h
 
         if interface_options['algorithm'] == 'nearest':
+
             interfaces = \
                 sli.find_interfacial_atoms_2D_nearest(x, y, height_ext, coords, traj_file,
                                                       snapshot, interface_options, latparam)
@@ -98,9 +114,15 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
     # Interface concentrations
     if interface_options['conc_flag']:
         concs = sli.interface_concentrations(snapshot, interfaces, interface_options)
-        return [height_avg, concs]
+        if interface_options['free_boundaries']:
+            return [height_avg, concs, system_depth]
+        else:
+            return [height_avg, concs]
     else:
-        return height_avg
+        if interface_options['free_boundaries']:
+            return height_avg
+        else:
+            return [height_avg, system_depth]
 
 
 if __name__ == "__main__":
@@ -112,15 +134,16 @@ if __name__ == "__main__":
         inputs = json.load(f)
 
     interface_options = inputs['interface_options']
-
-    assert interface_options['algorithm'] == 'ITIM' or \
-           interface_options['algorithm'] == 'nearest', \
-           'Algorithm for finding interfacial atoms must be "ITIM" or "nearest".'
-
     psi_avg_flag = inputs['psi_avg_flag']
+    latparam = inputs['latparam']
 
     interface_options['interface_flag'] = \
         interface_options['traj_flag'] or interface_options['conc_flag']
+
+    if interface_options['interface_flag']:
+        assert interface_options['algorithm'] == 'ITIM' or \
+               interface_options['algorithm'] == 'nearest', \
+               'Algorithm for finding interfacial atoms must be "ITIM" or "nearest".'
 
     # Make directories for interface trajectories
     if interface_options['traj_flag']:
@@ -142,9 +165,8 @@ if __name__ == "__main__":
     traj_files = traj_files.decode().split('\n')[:-1]
     nframes = len(traj_files)
 
-    # Read 1 frame to get atom names
+    # Read 1st frame to get atom names, free boundary atoms
     snapshot = mdtraj.load_lammpstrj(traj_files[0], top=traj_top_file)
-    # box_sizes = 10.0*snapshot.unitcell_lengths
 
     if interface_options['conc_flag']:
         (table, _) = snapshot.top.to_dataframe()
@@ -152,24 +174,32 @@ if __name__ == "__main__":
         interface_options['atom_name_list'] = np.unique(interface_options['atom_names'])
         n_names = len(interface_options['atom_name_list'])
 
+    if interface_options['free_boundaries']:
+
+        coords = 100.0*snapshot.xyz
+        coordsz = coords[0, :, 2]
+        del coords
+
+        (interface_options['boundary_atoms_lower'],
+         interface_options['boundary_atoms_upper']) = get_boundary_atoms(coordsz, latparam)
+        del coordsz
+
     del snapshot
 
     # First frame
     output1 = analyze_frame(nframes, 0, traj_files[0], traj_top_file,
-                           inputs['n_neighbors'],  inputs['latparam'], vectors_ref,
+                           inputs['n_neighbors'],  latparam, vectors_ref,
                            tree_ref, inputs['smoothing_cutoff'], inputs['crossover'],
                            interface_options, inputs['outfile_prefix'], psi_avg_flag, False)
 
     # Rest of frames
-    start = time.time()
     output2 = Parallel(n_jobs=inputs['nthreads']) \
               (delayed(analyze_frame) \
                (nframes, frame, traj_files[frame], traj_top_file,
-                inputs['n_neighbors'], inputs['latparam'], vectors_ref, tree_ref,
+                inputs['n_neighbors'], latparam, vectors_ref, tree_ref,
                 inputs['smoothing_cutoff'], inputs['crossover'],
                 interface_options, inputs['outfile_prefix'], psi_avg_flag, False) \
                for frame in range(1, nframes))
-    print('Time:', (time.time()-start)/len(range(1, nframes)))
 
     if psi_avg_flag:
 
@@ -180,8 +210,7 @@ if __name__ == "__main__":
 
     else:
 
-        n_layers = (interface_options['algorithm'] == 'nearest') + \
-                   (interface_options['algorithm'] == 'ITIM')*interface_options['ITIM']['n_layers']
+        n_layers = interface_options['n_layers']
 
         # Combine first and subsequent frame data
         if interface_options['conc_flag']:
@@ -194,18 +223,20 @@ if __name__ == "__main__":
 
             # Save concentrations to file
             cols = ['frame']
-            for ilayer in range(n_layers):
-                for phase in ['E', 'C']:
-                    for interface in ['L', 'U']:
-                        for iname in range(n_names-1):
-                            code = interface + str(ilayer) + phase + \
+            nbins = (n_layers-1)*interface_options['nbins_per_layer'] + 1
+            for ibin in range(nbins):
+                #for phase in ['E', 'C']:
+                for interface in ['L', 'U']:
+                    for iname in range(n_names-1):
+                        code = interface + str(ibin) + \
                                    interface_options['atom_name_list'][iname]
-                            cols.append(code)
+                        cols.append(code)
 
             with open(inputs['outfile_prefix'] + '_concs.dat', 'w') as f:
                 f.write('Codes: 1st is interface (L=lower, U=upper), '+ \
-                        '2nd is layer (0=at interface, 1=one layer from interface, ...), ' + \
-                        '3rd is phase (E=phase at edge of box, C=phase in center of box), ' + \
+                        #'2nd is layer (0=at interface, 1=one layer from interface, ...), ' + \
+                        '2nd is bin (edge to center, middle is around interface boundary), ' + \
+                        #'3rd is phase (E=phase at edge of box, C=phase in center of box), ' + \
                         'Last is the atom name.\n')
             outdata = pd.DataFrame(columns=cols)
             outdata[cols[0]] = range(nframes)
@@ -213,9 +244,22 @@ if __name__ == "__main__":
 
             outdata.to_csv(inputs['outfile_prefix'] + '_concs.dat', mode='a', index=False, sep=str(' '))
 
+            if interface_options['free_boundaries']:
+                system_depth = np.hstack((output1[2], np.array([output2[i][2] for i in range(nframes-1)])))
+
         else:
 
-            height = np.vstack((output1, np.array(output2)))
+            if interface_options['free_boundaries']:
+
+                height = np.vstack((output1[0],
+                                    np.array([output2[i][0] for i in range(nframes-1)])))
+
+                system_depth = np.vstack((output1[1],
+                                          np.array([output2[i][1] for i in range(nframes-1)])))
+
+            else:
+
+                height = np.vstack((output1, np.array(output2)))
 
         del output1, output2
 
@@ -224,3 +268,8 @@ if __name__ == "__main__":
         outdata = np.column_stack((range(nframes), height))
         np.savetxt(inputs['outfile_prefix'] + '_pos.dat', outdata,
                    header='Frame | Interface postions (angstroms) for lower and upper interfaces')
+
+        # Save system depth to file
+        outdata = np.column_stack((range(nframes), system_depth))
+        np.savetxt(inputs['outfile_prefix'] + '_sys_depth.dat', outdata,
+                   header='Frame | System depth (angstroms)')
