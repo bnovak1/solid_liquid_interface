@@ -248,6 +248,12 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
     nx_grid = X.shape[0]
     ny_grid = X.shape[1]
 
+    # Apply periodic boundary conditions to insure all coordinates are in [0, box_size].
+    # This is required for the k-d tree algorithm with periodic boundary conditions.
+    # k-d tree cannot have coordinates exactly at upper boundary, shift to lower boundary
+    coords -= box_sizes*np.floor(coords/box_sizes)
+    coords -= box_sizes*(coords == box_sizes)
+
     # Keep only coordinates and grid points near interfaces
     try:
 
