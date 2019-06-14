@@ -22,6 +22,8 @@ import solid_liquid_interface as sli
 def analyze_frame(dimension, traj_file, topfile, n_neighbors, latparam, vectors_ref, tree_ref,
                  smoothing_cutoff, crossover, interface_options, outfile_prefix, psi_avg_flag):
 
+    print(traj_file)
+
     # Read trajectory frame
     snapshot = mdtraj.load_lammpstrj(traj_file, top=topfile)
     snapshot.xyz *= snapshot.unitcell_lengths
@@ -92,11 +94,7 @@ def analyze_frame(dimension, traj_file, topfile, n_neighbors, latparam, vectors_
     else:
         return A_sq
 
-
-if __name__ == "__main__":
-
-    # Name of input file from command line
-    infile = sys.argv[1]
+def main(infile):
 
     with open(infile) as f:
         inputs = json.load(f)
@@ -265,3 +263,10 @@ if __name__ == "__main__":
                               'Last is the atom type.\n' + ' | '.join(cols))
             # df = pd.DataFrame(conc, columns=cols)
             # df.to_csv(inputs['outfile_prefix'] + '_concs.dat', index=False)
+
+if __name__ == "__main__":
+
+    # Name of input file from command line
+    infile = sys.argv[1]
+
+    main(infile)
