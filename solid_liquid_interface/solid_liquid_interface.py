@@ -242,7 +242,8 @@ def find_interfacial_atoms_1D(x, height, coords, traj_file, snapshot, interface_
 
 def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, vectors_ref,
                            tree_ref, X, Y, Z, smoothing_cutoff, crossover, interface_options,
-                           outfile_prefix, psi_avg_flag=False, reduce_flag=True):
+                           outfile_prefix, psi_avg_flag=False, reduce_flag=True,
+                           save_flag=False):
 
     natoms = coords.shape[0]
     nx_grid = X.shape[0]
@@ -322,10 +323,9 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
     psi = (np.sum(wd*phi[ii], axis=1)/np.sum(wd, axis=1)).reshape(nx_grid, ny_grid, nz_grid)/(latparam**2)
     del wd, ii
 
-    # Save phi and psi from 1 frame and 1 grid point for plotting
-    try:
-        if not interface_positions_2D.save_flag: pass
-    except AttributeError:
+    # Save phi and psi from 1 frame and 1 grid point for plotting and testing
+    if save_flag:
+
         ind = np.intersect1d(np.where(psi_grid[:, 0] > 0)[0],
                              np.where(psi_grid[:, 1] > 0)[0])
         grid_point = psi_grid[ind[0], :2]
@@ -339,8 +339,6 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
               (np.abs(coords[:, 1] - grid_point[1]) < latparam/4.0)
         outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
         np.savetxt(outfile_prefix + '_phi.dat', outdata)
-
-        interface_positions_2D.save_flag = False
 
     # Return mean value of psi
     if psi_avg_flag:
@@ -388,7 +386,8 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
 
 def interface_positions_1D(coords, box_sizes, snapshot, n_neighbors, latparam, vectors_ref,
                            tree_ref, X, Z, smoothing_cutoff, crossover, interface_options,
-                           outfile_prefix, psi_avg_flag=False, reduce_flag=True):
+                           outfile_prefix, psi_avg_flag=False, reduce_flag=True,
+                           save_flag=False):
 
     natoms = snapshot.n_atoms
     nx_grid = X.shape[0]
@@ -472,16 +471,13 @@ def interface_positions_1D(coords, box_sizes, snapshot, n_neighbors, latparam, v
                                                                   nz_grid)/(latparam**2)
     del wd, ii
 
-    # Save phi and psi from 1 frame for plotting
-    try:
-        if not interface_positions_1D.save_flag: pass
-    except AttributeError:
+    # Save phi and psi from 1 frame for plotting and testing
+    if save_flag:
         ind = np.where(np.abs(coords[:, 0] - psi_grid[nz_grid, 0]) < latparam/4.0)[0]
         outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
         np.savetxt(outfile_prefix + '_phi.dat', outdata)
         outdata = np.column_stack((psi_grid[nz_grid:2*nz_grid, 1], psi[1, :]))
         np.savetxt(outfile_prefix + '_psi.dat', outdata)
-        interface_positions_1D.save_flag = False
 
     # Return mean value of psi
     if psi_avg_flag:

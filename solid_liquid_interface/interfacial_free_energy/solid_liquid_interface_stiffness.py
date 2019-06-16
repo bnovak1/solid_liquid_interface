@@ -1,5 +1,5 @@
 '''
-# quasi-1D interface
+# quasi-1D interface, no concentration, 4 threads
 >>> import numpy as np
 >>> import solid_liquid_interface_stiffness as slis
 >>> slis.main('tests/traj_analysis_1D.json')
@@ -9,7 +9,12 @@
 True
 >>> phi = np.loadtxt('test_phi.dat')
 >>> phi_test = np.loadtxt('tests/Ti-results/1D/test_phi.dat')
-
+>>> np.allclose(phi, phi_test)
+True
+>>> psi = np.loadtxt('test_psi.dat')
+>>> psi_test = np.loadtxt('tests/Ti-results/1D/test_psi.dat')
+>>> np.allclose(psi, psi_test)
+True
 
 # 2D interface
 
@@ -37,7 +42,8 @@ import solid_liquid_interface as sli
 
 
 def analyze_frame(dimension, traj_file, topfile, n_neighbors, latparam, vectors_ref, tree_ref,
-                 smoothing_cutoff, crossover, interface_options, outfile_prefix, psi_avg_flag):
+                 smoothing_cutoff, crossover, interface_options, outfile_prefix, psi_avg_flag,
+                 save_flag=False):
 
     # Read trajectory frame
     snapshot = mdtraj.load_lammpstrj(traj_file, top=topfile)
@@ -162,7 +168,8 @@ def main(infile):
     output1 = analyze_frame(dimension, traj_files[0], traj_top_file,
                            inputs['n_neighbors'],  inputs['latparam'], vectors_ref,
                            tree_ref, inputs['smoothing_cutoff'], inputs['crossover'],
-                           interface_options, inputs['outfile_prefix'], psi_avg_flag)
+                           interface_options, inputs['outfile_prefix'], psi_avg_flag,
+                           save_flag=True)
 
     output2 = Parallel(n_jobs=inputs['nthreads']) \
               (delayed(analyze_frame) \
