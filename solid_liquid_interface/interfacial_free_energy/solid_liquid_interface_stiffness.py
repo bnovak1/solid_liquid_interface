@@ -1,3 +1,20 @@
+'''
+# quasi-1D interface
+>>> import numpy as np
+>>> import solid_liquid_interface_stiffness as slis
+>>> slis.main('tests/traj_analysis_1D.json')
+>>> data = np.loadtxt('test_data.dat')
+>>> data_test = np.loadtxt('tests/Ti-results/1D/test_data.dat')
+>>> np.allclose(data, data_test)
+True
+>>> phi = np.loadtxt('test_phi.dat')
+>>> phi_test = np.loadtxt('tests/Ti-results/1D/test_phi.dat')
+
+
+# 2D interface
+
+'''
+
 # added by pasteurize
 #########################################################################################
 from __future__ import division
@@ -21,8 +38,6 @@ import solid_liquid_interface as sli
 
 def analyze_frame(dimension, traj_file, topfile, n_neighbors, latparam, vectors_ref, tree_ref,
                  smoothing_cutoff, crossover, interface_options, outfile_prefix, psi_avg_flag):
-
-    print(traj_file)
 
     # Read trajectory frame
     snapshot = mdtraj.load_lammpstrj(traj_file, top=topfile)

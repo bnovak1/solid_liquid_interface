@@ -324,24 +324,23 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
 
     # Save phi and psi from 1 frame and 1 grid point for plotting
     try:
-        if interface_positions_2D.save_flag:
-            ind = np.intersect1d(np.where(psi_grid[:, 0] > 0)[0],
-                                 np.where(psi_grid[:, 1] > 0)[0])
-            grid_point = psi_grid[ind[0], :2]
-
-            ind = (psi_grid[:, 0] == grid_point[0])*(psi_grid[:, 1] == grid_point[1])
-            outdata = np.column_stack((psi_grid[ind, 2],
-                                       psi.reshape(nx_grid*ny_grid*nz_grid, -1)[ind]))
-            np.savetxt(outfile_prefix + '_psi.dat', outdata)
-
-            ind = (np.abs(coords[:, 0] - grid_point[0]) < latparam/4.0)* \
-                  (np.abs(coords[:, 1] - grid_point[1]) < latparam/4.0)
-            outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
-            np.savetxt(outfile_prefix + '_phi.dat', outdata)
-
-            interface_positions_2D.save_flag = False
+        if not interface_positions_2D.save_flag: pass
     except AttributeError:
-        interface_positions_2D.save_flag = True
+        ind = np.intersect1d(np.where(psi_grid[:, 0] > 0)[0],
+                             np.where(psi_grid[:, 1] > 0)[0])
+        grid_point = psi_grid[ind[0], :2]
+
+        ind = (psi_grid[:, 0] == grid_point[0])*(psi_grid[:, 1] == grid_point[1])
+        outdata = np.column_stack((psi_grid[ind, 2],
+                                   psi.reshape(nx_grid*ny_grid*nz_grid, -1)[ind]))
+        np.savetxt(outfile_prefix + '_psi.dat', outdata)
+
+        ind = (np.abs(coords[:, 0] - grid_point[0]) < latparam/4.0)* \
+              (np.abs(coords[:, 1] - grid_point[1]) < latparam/4.0)
+        outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
+        np.savetxt(outfile_prefix + '_phi.dat', outdata)
+
+        interface_positions_2D.save_flag = False
 
     # Return mean value of psi
     if psi_avg_flag:
@@ -475,15 +474,14 @@ def interface_positions_1D(coords, box_sizes, snapshot, n_neighbors, latparam, v
 
     # Save phi and psi from 1 frame for plotting
     try:
-        if interface_positions_1D.save_flag:
-            ind = np.where(np.abs(coords[:, 0] - psi_grid[nz_grid, 0]) < latparam/4.0)[0]
-            outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
-            np.savetxt(outfile_prefix + '_phi.dat', outdata)
-            outdata = np.column_stack((psi_grid[nz_grid:2*nz_grid, 1], psi[1, :]))
-            np.savetxt(outfile_prefix + '_psi.dat', outdata)
-            interface_positions_1D.save_flag = False
+        if not interface_positions_1D.save_flag: pass
     except AttributeError:
-        interface_positions_1D.save_flag = True
+        ind = np.where(np.abs(coords[:, 0] - psi_grid[nz_grid, 0]) < latparam/4.0)[0]
+        outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
+        np.savetxt(outfile_prefix + '_phi.dat', outdata)
+        outdata = np.column_stack((psi_grid[nz_grid:2*nz_grid, 1], psi[1, :]))
+        np.savetxt(outfile_prefix + '_psi.dat', outdata)
+        interface_positions_1D.save_flag = False
 
     # Return mean value of psi
     if psi_avg_flag:
@@ -515,9 +513,9 @@ def interface_positions_1D(coords, box_sizes, snapshot, n_neighbors, latparam, v
         hmax = np.max(height, axis=0)
         try:
             interface_positions_1D.hrng_half = max(interface_positions_1D.hrng_half,
-                                                   1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam)
+                                                   1.6*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam)
         except AttributeError:
-            interface_positions_1D.hrng_half = 1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam
+            interface_positions_1D.hrng_half = 1.6*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam
 
         hmean = np.mean(height, axis=0)
 
