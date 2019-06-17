@@ -1,5 +1,5 @@
 {
-    "traj_dir": "traj-Ti_2D",
+    "traj_dir": "tests/traj-Ti_2D",
     "reference_prefix": "reference_solid_Ti",
     "traj_pattern": "frame.*.lammpstrj",
     "traj_top_file": "Ti.pdb",
@@ -7,9 +7,7 @@
     "latparam": 3.325,
     "n_neighbors": 14,
     "smoothing_cutoff": 8.3125,
-    "crossover": 0.086285,
-    "outfile_prefix": "stiffness_100_001-2",
-    "psi_avg_flag": false,
+    "outfile_prefix": "test",
     "dimension": 2,
     "interface_options": {
         "traj_flag": false,
@@ -26,5 +24,5 @@
             "grid_spacing": 0.12
         }
     },
-    "nthreads": 8
+    "nthreads": 1
 }

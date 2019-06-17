@@ -11,13 +11,15 @@ from future import standard_library
 standard_library.install_aliases()
 #########################################################################################
 
+import lmfit
 import mdtraj
 import numpy as np
 import pandas as pd
-import scipy.spatial as ss
+import scipy.constants as constants
 import scipy.fftpack as fft
 import scipy.interpolate as interp
-import scipy.constants as constants
+import scipy.spatial as ss
+import scipy.special as spec
 import subprocess
 
 
@@ -240,10 +242,108 @@ def find_interfacial_atoms_1D(x, height, coords, traj_file, snapshot, interface_
     return interfaces
 
 
-def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, vectors_ref,
-                           tree_ref, X, Y, Z, smoothing_cutoff, crossover, interface_options,
-                           outfile_prefix, psi_avg_flag=False, reduce_flag=True,
-                           save_flag=False):
+def erf_fit_func(order_param_sol, order_param_liq, pos_bound, pos,
+                 pos_interface_lower, pos_interface_upper,
+                 sigma_lower, sigma_upper, erf_sign):
+
+    order_param_fit = \
+        0.5*((order_param_sol + order_param_liq) + \
+             erf_sign*(pos < pos_bound)*(order_param_sol - order_param_liq)* \
+             spec.erf((pos - pos_interface_lower)/(sigma_lower*np.sqrt(2.0))) - \
+             erf_sign*(pos > pos_bound)*(order_param_sol - order_param_liq)* \
+             spec.erf((pos - pos_interface_upper)/(sigma_upper*np.sqrt(2.0))))
+
+    return order_param_fit
+
+
+def residual(params, pos, order_param, wghts, erf_sign):
+    """
+    Description
+    ----
+    Compute residuals for fit.
+
+    Inputs
+    ----
+    :params: Parameters for the model
+    :pos: Position in interface normal direction
+    :order_param: Order parameter to distinguish liquid from solid
+    :wghts: Weights
+    :erf_sign: 1 for solid in center of box and -1 for liquid in center of box
+
+    Outputs
+    ----
+    :residuals: Residuals
+    """
+
+    order_param_sol = params['order_param_sol'].value
+    order_param_liq = params['order_param_liq'].value
+    sigma_lower = params['sigma_lower'].value
+    sigma_upper = params['sigma_upper'].value
+    pos_interface_lower = params['pos_interface_lower'].value
+    pos_interface_upper = params['pos_interface_upper'].value
+    pos_bound = params['pos_bound'].value
+
+    model = erf_fit_func(order_param_sol, order_param_liq, pos_bound, pos,
+                         pos_interface_lower, pos_interface_upper,
+                         sigma_lower, sigma_upper, erf_sign)
+
+    residuals = (order_param - model)*wghts
+
+    return residuals
+
+
+def fitting_erf(pos, order_param, erf_sign):
+
+    wghts = np.ones(len(pos))  # All weights equal
+    params = lmfit.Parameters()
+
+    pos_min = np.min(pos)
+    delta_pos = np.max(pos) - pos_min
+    order_param_sol_ini = np.max(order_param)
+    order_param_liq_ini = np.min(order_param)
+    fliq = (np.mean(order_param) - order_param_sol_ini)/ \
+           (order_param_liq_ini - order_param_sol_ini)
+    fsol = 1 - fliq
+    pos_interface_lower_ini = delta_pos*((fliq/2)*(erf_sign==1) + \
+                                         (fsol/2)*(erf_sign==-1)) + pos_min
+    pos_interface_upper_ini = delta_pos*((1 - fliq/2)*(erf_sign==1) + \
+                                         (1 - fsol/2)*(erf_sign==-1)) + pos_min
+
+    params.add('order_param_sol', value=order_param_sol_ini, min=0.0)
+    params.add('order_param_liq', value=order_param_liq_ini, min=0.0)
+    params.add('pos_interface_lower', value=pos_interface_lower_ini)
+    params.add('pos_interface_upper', value=pos_interface_upper_ini)
+    params.add('sigma_lower', value=3.0, min=0.0)
+    params.add('sigma_upper', value=3.0, min=0.0)
+    params.add('pos_bound', value=np.mean(pos))
+
+    fit = lmfit.minimize(residual, params, args=(pos, order_param, wghts, erf_sign))
+
+    crossover = (fit.params['order_param_liq'].value + \
+                 fit.params['order_param_sol'].value)/2
+    interface_width = (fit.params['sigma_upper'].value + \
+                       fit.params['sigma_upper'].value)/2
+
+    # import matplotlib.pyplot as plt
+    # plt.plot(pos, order_param)
+    # plt.plot(pos, erf_fit_func(fit.params['order_param_sol'].value,
+    #                            fit.params['order_param_liq'].value,
+    #                            fit.params['pos_bound'].value,
+    #                            pos,
+    #                            fit.params['pos_interface_lower'].value,
+    #                            fit.params['pos_interface_upper'].value,
+    #                            fit.params['sigma_lower'].value,
+    #                            fit.params['sigma_upper'].value,
+    #                            erf_sign))
+    # plt.show()
+    # import pdb; pdb.set_trace()
+
+    return (crossover, interface_width)
+
+
+def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, latparam,
+                           vectors_ref, tree_ref, X, Y, Z, smoothing_cutoff,
+                           interface_options, outfile_prefix, crossover=None, reduce_flag=True):
 
     natoms = coords.shape[0]
     nx_grid = X.shape[0]
@@ -258,18 +358,18 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
     # Keep only coordinates and grid points near interfaces
     try:
 
-        ind = (coords[:, 2] >= interface_positions_1D.interface_range[0, 0])* \
-              (coords[:, 2] <= interface_positions_1D.interface_range[0, 1]) + \
-              (coords[:, 2] >= interface_positions_1D.interface_range[1, 0])* \
-              (coords[:, 2] <= interface_positions_1D.interface_range[1, 1])
+        ind = (coords[:, 2] >= interface_positions_2D.interface_range[0, 0])* \
+              (coords[:, 2] <= interface_positions_2D.interface_range[0, 1]) + \
+              (coords[:, 2] >= interface_positions_2D.interface_range[1, 0])* \
+              (coords[:, 2] <= interface_positions_2D.interface_range[1, 1])
         coords = coords[ind, :]
         natoms = coords.shape[0]
 
         shift = smoothing_cutoff + 2.0*latparam
-        ind = ((Z >= interface_positions_1D.interface_range[0, 0] + shift)* \
-               (Z <= interface_positions_1D.interface_range[0, 1] - shift) + \
-               (Z >= interface_positions_1D.interface_range[1, 0] + shift)* \
-               (Z <= interface_positions_1D.interface_range[1, 1] - shift))
+        ind = ((Z >= interface_positions_2D.interface_range[0, 0] + shift)* \
+               (Z <= interface_positions_2D.interface_range[0, 1] - shift) + \
+               (Z >= interface_positions_2D.interface_range[1, 0] + shift)* \
+               (Z <= interface_positions_2D.interface_range[1, 1] - shift))
         X = X[ind].reshape(nx_grid, ny_grid, -1)
         Y = Y[ind].reshape(nx_grid, ny_grid, -1)
         Z = Z[ind].reshape(nx_grid, ny_grid, -1)
@@ -324,7 +424,7 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
     del wd, ii
 
     # Save phi and psi from 1 frame and 1 grid point for plotting and testing
-    if save_flag:
+    if frame_num == 0:
 
         ind = np.intersect1d(np.where(psi_grid[:, 0] > 0)[0],
                              np.where(psi_grid[:, 1] > 0)[0])
@@ -340,9 +440,14 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
         outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
         np.savetxt(outfile_prefix + '_phi.dat', outdata)
 
-    # Return mean value of psi
-    if psi_avg_flag:
-        return np.mean(psi)
+    # Crossover value for psi by fitting to error functions
+    if (reduce_flag and frame_num == 0) or not reduce_flag:
+        zpos = Z[0, 0, :]
+        psi_mean = np.mean(np.mean(psi, axis=0), axis=0)
+        erf_sign = 2*(psi_mean[int(len(psi_mean)/2)] > psi_mean[0]) - 1
+        (crossover, _) = fitting_erf(zpos, psi_mean, erf_sign)
+        if (reduce_flag and frame_num == 0):
+            np.savetxt('crossover.txt', [crossover])
 
     # Interface heights for each interface
     psi_grid = psi_grid.reshape(nx_grid, ny_grid, nz_grid, 3)
@@ -370,10 +475,12 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
         hmin = np.min(np.min(height, axis=0), axis=0)
         hmax = np.max(np.max(height, axis=0), axis=0)
         try:
-            interface_positions_2D.hrng_half = max(interface_positions_2D.hrng_half,
-                                                   1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam)
+            interface_positions_2D.hrng_half = \
+                max(interface_positions_2D.hrng_half,
+                    1.6*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 4.0*latparam)
         except AttributeError:
-            interface_positions_2D.hrng_half = 1.45*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam
+            interface_positions_2D.hrng_half = \
+                1.6*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 4.0*latparam
 
         hmean = np.mean(np.mean(height, axis=0), axis=0)
 
@@ -381,13 +488,19 @@ def interface_positions_2D(coords, box_sizes, snapshot, n_neighbors, latparam, v
             np.column_stack((hmean - interface_positions_2D.hrng_half,
                              hmean + interface_positions_2D.hrng_half))
 
+
+    # print(frame_num)
+    # import matplotlib.pyplot as plt
+    # plt.plot(Z[0, 0, :], np.mean(np.mean(psi, axis=0), axis=0), '.-')
+    # plt.show()
+    # import pdb; pdb.set_trace()
+
     return height
 
 
-def interface_positions_1D(coords, box_sizes, snapshot, n_neighbors, latparam, vectors_ref,
-                           tree_ref, X, Z, smoothing_cutoff, crossover, interface_options,
-                           outfile_prefix, psi_avg_flag=False, reduce_flag=True,
-                           save_flag=False):
+def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, latparam,
+                           vectors_ref, tree_ref, X, Z, smoothing_cutoff, interface_options,
+                           outfile_prefix, crossover=None, reduce_flag=True):
 
     natoms = snapshot.n_atoms
     nx_grid = X.shape[0]
@@ -467,21 +580,25 @@ def interface_positions_1D(coords, box_sizes, snapshot, n_neighbors, latparam, v
     if not interface_options['interface_flag']: del tree_xz
 
     # psi
-    psi = (np.sum(wd*phi[ii], axis=1)/np.sum(wd, axis=1)).reshape(nx_grid,
-                                                                  nz_grid)/(latparam**2)
+    psi = (np.sum(wd*phi[ii], axis=1)/np.sum(wd, axis=1)).reshape(nx_grid, nz_grid)/(latparam**2)
     del wd, ii
 
-    # Save phi and psi from 1 frame for plotting and testing
-    if save_flag:
+    # Save phi and psi from 1st frame for plotting and testing
+    if frame_num == 0:
         ind = np.where(np.abs(coords[:, 0] - psi_grid[nz_grid, 0]) < latparam/4.0)[0]
         outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
         np.savetxt(outfile_prefix + '_phi.dat', outdata)
         outdata = np.column_stack((psi_grid[nz_grid:2*nz_grid, 1], psi[1, :]))
         np.savetxt(outfile_prefix + '_psi.dat', outdata)
 
-    # Return mean value of psi
-    if psi_avg_flag:
-        return np.mean(psi)
+    # Crossover value for psi by fitting to error functions
+    if (reduce_flag and frame_num == 0) or not reduce_flag:
+        zpos = Z[0, :]
+        psi_mean = np.mean(psi, axis=0)
+        erf_sign = 2*(psi_mean[int(len(psi_mean)/2)] > psi_mean[0]) - 1
+        (crossover, _) = fitting_erf(zpos, psi_mean, erf_sign)
+        if (reduce_flag and frame_num == 0):
+            np.savetxt('crossover.txt', [crossover])
 
     # Interface heights for each interface
     psi_grid = psi_grid.reshape(nx_grid, nz_grid, 2)
