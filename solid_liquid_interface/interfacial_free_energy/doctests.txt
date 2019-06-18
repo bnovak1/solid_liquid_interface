@@ -1,0 +1,47 @@
+quasi-1D interface, no interface atom determination, 4 threads
+
+    >>> import numpy as np
+    >>> import solid_liquid_interface_stiffness as slis
+    >>> slis.main('tests/traj_analysis_1D.json')
+
+    >>> data = np.loadtxt('test_data.dat')
+    >>> data_test = np.loadtxt('tests/Ti-results/1D/test_data.dat')
+    >>> np.allclose(data, data_test)
+    True
+
+    >>> phi = np.loadtxt('test_phi.dat')
+    >>> phi_test = np.loadtxt('tests/Ti-results/1D/test_phi.dat')
+    >>> np.allclose(phi, phi_test)
+    True
+
+    >>> psi = np.loadtxt('test_psi.dat')
+    >>> psi_test = np.loadtxt('tests/Ti-results/1D/test_psi.dat')
+    >>> np.allclose(psi, psi_test)
+    True
+
+2D interface, no interface atom determination, 4 threads
+
+    >>> import numpy as np
+    >>> import solid_liquid_interface_stiffness as slis
+    >>> slis.main('tests/traj_analysis_2D.json')
+
+    >>> data = np.loadtxt('test_data.dat')
+    >>> data_test = np.loadtxt('tests/Ti-results/2D/test_data.dat')
+    >>> np.allclose(data, data_test)
+    True
+
+    >>> phi = np.loadtxt('test_phi.dat')
+    >>> phi_test = np.loadtxt('tests/Ti-results/2D/test_phi.dat')
+    >>> np.allclose(phi, phi_test)
+    True
+
+    >>> psi = np.loadtxt('test_psi.dat')
+    >>> psi_test = np.loadtxt('tests/Ti-results/2D/test_psi.dat')
+    >>> np.allclose(psi, psi_test)
+    True
+
+Delete output files from above tests
+
+    >>> import os, glob
+    >>> file_list = glob.glob('test_*.dat') + glob.glob('crossover.txt')
+    >>> for file in file_list: os.remove(file)
