@@ -20,7 +20,8 @@ import solid_liquid_interface as sli
 
 
 def analyze_frame(dimension, frame_num, traj_file, topfile, n_neighbors, latparam, vectors_ref, tree_ref,
-                 smoothing_cutoff, interface_options, outfile_prefix, crossover=None):
+                 smoothing_cutoff, interface_options, outfile_prefix,
+                 crossover=None, interface_range=None):
 
     # Read trajectory frame
     snapshot = mdtraj.load_lammpstrj(traj_file, top=topfile)
@@ -39,7 +40,7 @@ def analyze_frame(dimension, frame_num, traj_file, topfile, n_neighbors, latpara
         height = sli.interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors,
                                             latparam, vectors_ref, tree_ref, X, Z,
                                             smoothing_cutoff, interface_options,
-                                            outfile_prefix, crossover)
+                                            outfile_prefix, crossover, reduce_flag=True)
 
         # Find interface atoms
         if interface_options['interface_flag']:
@@ -47,7 +48,7 @@ def analyze_frame(dimension, frame_num, traj_file, topfile, n_neighbors, latpara
             x = np.hstack((np.unique(X), box_sizes[0, 0]))
             interfaces = sli.find_interfacial_atoms_1D(x, np.row_stack((height, height[0, :])),
                                                        coords, traj_file, snapshot,
-                                                       interface_options, reduce_flag=True)
+                                                       interface_options)
 
     elif dimension == 2:
 
@@ -59,7 +60,8 @@ def analyze_frame(dimension, frame_num, traj_file, topfile, n_neighbors, latpara
         height = sli.interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors,
                                             latparam, vectors_ref, tree_ref, X, Y, Z,
                                             smoothing_cutoff, interface_options,
-                                            outfile_prefix, crossover, reduce_flag=True)
+                                            outfile_prefix, crossover,
+                                            reduce_flag=True, interface_range=interface_range)
 
         # Find interface atoms
         if interface_options['interface_flag']:
@@ -149,12 +151,17 @@ def main(infile):
 
     crossover = np.loadtxt('crossover.txt')
 
+    if inputs['dimension'] == 2:
+        interface_range = np.loadtxt('interface_range.txt')
+    else:
+        interface_range = None
+
     output2 = Parallel(n_jobs=inputs['nthreads']) \
               (delayed(analyze_frame) \
                (dimension, frame, traj_files[frame], traj_top_file,
                 inputs['n_neighbors'], inputs['latparam'], vectors_ref, tree_ref,
                 inputs['smoothing_cutoff'], interface_options, inputs['outfile_prefix'],
-                crossover) \
+                crossover, interface_range) \
                for frame in range(1, nframes))
 
     # Combine first and subsequent frame data

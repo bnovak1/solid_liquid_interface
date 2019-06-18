@@ -343,7 +343,8 @@ def fitting_erf(pos, order_param, erf_sign):
 
 def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, latparam,
                            vectors_ref, tree_ref, X, Y, Z, smoothing_cutoff,
-                           interface_options, outfile_prefix, crossover=None, reduce_flag=True):
+                           interface_options, outfile_prefix, crossover=None,
+                           reduce_flag=True, interface_range=None):
 
     natoms = coords.shape[0]
     nx_grid = X.shape[0]
@@ -356,25 +357,23 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
     coords -= box_sizes*(coords == box_sizes)
 
     # Keep only coordinates and grid points near interfaces
-    try:
+    if reduce_flag and frame_num > 0:
 
-        ind = (coords[:, 2] >= interface_positions_2D.interface_range[0, 0])* \
-              (coords[:, 2] <= interface_positions_2D.interface_range[0, 1]) + \
-              (coords[:, 2] >= interface_positions_2D.interface_range[1, 0])* \
-              (coords[:, 2] <= interface_positions_2D.interface_range[1, 1])
+        ind = (coords[:, 2] >= interface_range[0, 0])* \
+              (coords[:, 2] <= interface_range[0, 1]) + \
+              (coords[:, 2] >= interface_range[1, 0])* \
+              (coords[:, 2] <= interface_range[1, 1])
         coords = coords[ind, :]
         natoms = coords.shape[0]
 
         shift = smoothing_cutoff + 2.0*latparam
-        ind = ((Z >= interface_positions_2D.interface_range[0, 0] + shift)* \
-               (Z <= interface_positions_2D.interface_range[0, 1] - shift) + \
-               (Z >= interface_positions_2D.interface_range[1, 0] + shift)* \
-               (Z <= interface_positions_2D.interface_range[1, 1] - shift))
+        ind = ((Z >= interface_range[0, 0] + shift)* \
+               (Z <= interface_range[0, 1] - shift) + \
+               (Z >= interface_range[1, 0] + shift)* \
+               (Z <= interface_range[1, 1] - shift))
         X = X[ind].reshape(nx_grid, ny_grid, -1)
         Y = Y[ind].reshape(nx_grid, ny_grid, -1)
         Z = Z[ind].reshape(nx_grid, ny_grid, -1)
-
-    except AttributeError: pass
 
     # List of points to compute psi on
     nz_grid = X.shape[2]
@@ -449,6 +448,11 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         if (reduce_flag and frame_num == 0):
             np.savetxt('crossover.txt', [crossover])
 
+    # import matplotlib.pyplot as plt
+    # plt.plot(Z[0, 0, :], np.mean(np.mean(psi, axis=0), axis=0), '.-')
+    # plt.savefig(str(frame_num) + '.png')
+    # plt.close()
+
     # Interface heights for each interface
     psi_grid = psi_grid.reshape(nx_grid, ny_grid, nz_grid, 3)
     height = np.zeros((nx_grid, ny_grid, 2))
@@ -470,32 +474,22 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
             fit = np.polyfit(psi[ix, iy, ind_crossing], psi_grid[ix, iy, ind_crossing, 2], 1)
             height[ix, iy, 1] = fit[0]*crossover + fit[1]
 
-    if reduce_flag:
-
-        hmin = np.min(np.min(height, axis=0), axis=0)
-        hmax = np.max(np.max(height, axis=0), axis=0)
-        try:
-            interface_positions_2D.hrng_half = \
-                max(interface_positions_2D.hrng_half,
-                    1.6*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 4.0*latparam)
-        except AttributeError:
-            interface_positions_2D.hrng_half = \
-                1.6*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 4.0*latparam
-
-        hmean = np.mean(np.mean(height, axis=0), axis=0)
-
-        interface_positions_2D.interface_range = \
-            np.column_stack((hmean - interface_positions_2D.hrng_half,
-                             hmean + interface_positions_2D.hrng_half))
-
-
-    # print(frame_num)
-    # import matplotlib.pyplot as plt
-    # plt.plot(Z[0, 0, :], np.mean(np.mean(psi, axis=0), axis=0), '.-')
-    # plt.show()
-    # import pdb; pdb.set_trace()
+    if frame_num == 0:
+        interface_range_2D(height, smoothing_cutoff, latparam)
 
     return height
+
+
+def interface_range_2D(height, smoothing_cutoff, latparam):
+
+    hmin = np.min(np.min(height, axis=0), axis=0)
+    hmax = np.max(np.max(height, axis=0), axis=0)
+
+    hrng_half = 5.0*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam
+    hmean = np.mean(np.mean(height, axis=0), axis=0)
+    interface_range = np.column_stack((hmean - hrng_half, hmean + hrng_half))
+
+    np.savetxt('interface_range.txt', interface_range)
 
 
 def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, latparam,
