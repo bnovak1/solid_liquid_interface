@@ -321,8 +321,9 @@ def fitting_erf(pos, order_param, erf_sign):
 
     crossover = (fit.params['order_param_liq'].value + \
                  fit.params['order_param_sol'].value)/2
-    interface_width = (fit.params['sigma_upper'].value + \
-                       fit.params['sigma_upper'].value)/2
+    multiplier = 2*np.sqrt(2)*spec.erfinv(0.99)
+    interface_widths = multiplier*np.array([fit.params['sigma_upper'].value,
+                                            fit.params['sigma_lower'].value])
 
     # import matplotlib.pyplot as plt
     # plt.plot(pos, order_param)
@@ -338,7 +339,7 @@ def fitting_erf(pos, order_param, erf_sign):
     # plt.show()
     # import pdb; pdb.set_trace()
 
-    return (crossover, interface_width)
+    return (crossover, interface_widths)
 
 
 def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, latparam,
@@ -422,7 +423,8 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
     psi = (np.sum(wd*phi[ii], axis=1)/np.sum(wd, axis=1)).reshape(nx_grid, ny_grid, nz_grid)/(latparam**2)
     del wd, ii
 
-    # Save phi and psi from 1 frame and 1 grid point for plotting and testing
+    # Save phi and psi from 1st frame and 1 grid point for plotting and testing
+    # Calculate and save interface width estimate for 1st frame
     if frame_num == 0:
 
         ind = np.intersect1d(np.where(psi_grid[:, 0] > 0)[0],
@@ -433,11 +435,23 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         outdata = np.column_stack((psi_grid[ind, 2],
                                    psi.reshape(nx_grid*ny_grid*nz_grid, -1)[ind]))
         np.savetxt(outfile_prefix + '_psi.dat', outdata)
+        del outdata
 
         ind = (np.abs(coords[:, 0] - grid_point[0]) < latparam/4.0)* \
               (np.abs(coords[:, 1] - grid_point[1]) < latparam/4.0)
         outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
         np.savetxt(outfile_prefix + '_phi.dat', outdata)
+        del outdata
+
+        zpos = Z[0, 0, :]
+        psi_flat = psi.reshape(-1, psi.shape[2])
+        erf_sign = 2*(psi_flat[0, int(len(zpos)/2)] > psi_flat[0, 0]) - 1
+        nfits = psi_flat.shape[0]
+
+        interface_widths = np.array([fitting_erf(zpos, psi_flat[ifit, :], erf_sign)[1] \
+                                     for ifit in range(nfits)]).flatten()
+        del zpos, psi_flat
+        np.savetxt('interface_width.dat', [np.mean(interface_widths)])
 
     # Crossover value for psi by fitting to error functions
     if (reduce_flag and frame_num == 0) or not reduce_flag:
@@ -578,12 +592,21 @@ def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
     del wd, ii
 
     # Save phi and psi from 1st frame for plotting and testing
+    # Calculate and save interface width estimate for 1st frame
     if frame_num == 0:
+
         ind = np.where(np.abs(coords[:, 0] - psi_grid[nz_grid, 0]) < latparam/4.0)[0]
         outdata = np.column_stack((coords[ind, 2], phi[ind]/latparam**2.0))
         np.savetxt(outfile_prefix + '_phi.dat', outdata)
         outdata = np.column_stack((psi_grid[nz_grid:2*nz_grid, 1], psi[1, :]))
         np.savetxt(outfile_prefix + '_psi.dat', outdata)
+
+        zpos = Z[0, :]
+        erf_sign = 2*(psi[0, int(len(zpos)/2)] > psi[0, 0]) - 1
+        nfits = psi.shape[0]
+        interface_widths = np.array([fitting_erf(zpos, psi[ifit, :], erf_sign)[1] \
+                                     for ifit in range(nfits)]).flatten()
+        np.savetxt('interface_width.dat', [np.mean(interface_widths)])
 
     # Crossover value for psi by fitting to error functions
     if (reduce_flag and frame_num == 0) or not reduce_flag:
