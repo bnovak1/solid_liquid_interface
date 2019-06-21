@@ -50,6 +50,31 @@ def get_ref_vectors(n_neighbors, reference_structure, topfile):
     return (vectors_ref, tree_ref)
 
 
+def visualize_bins(box_sizes, latparam, interface_options, height):
+
+    from mpl_toolkits import mplot3d
+    import matplotlib.pyplot as plt
+    import my_plot_settings_article as mpsa
+
+    ax = plt.axes(projection='3d')
+    (X, Y) = np.mgrid[0:box_sizes[0][0]:latparam/2, 0:box_sizes[0][1]:latparam/2]
+
+    colors = ['b', 'g', 'r', 'k', 'm', 'c', 'y']
+    for ilayer in range(interface_options['n_layers']):
+        for ibin in range(interface_options['nbins_per_layer']):
+            ax.plot_surface(X, Y, height[:, :, 0]+ ilayer*1.439725 + ibin*1.439725/3,
+                            color=colors[ibin])
+    ax.plot_surface(X, Y, height[:, :, 0]+ (ilayer+1)*1.439725 + 0*1.439725/3, color=colors[0])
+
+    ax.set_xlabel('x ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)
+    ax.set_ylabel('y ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)
+    ax.set_zlabel('z ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)
+    ax.dist = 14
+
+    mpsa.save_figure('bins.png', 300)
+    plt.close()
+
+
 def save_pdb(traj_file, coords, snapshot, interface_options, interfaces):
 
         natoms = coords.shape[0]
@@ -384,7 +409,7 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
     tree = ss.cKDTree(coords, boxsize=box_sizes)
 
     # Get neighbor distances and neighbors
-    (neighbor_distances, neighbors) = tree.query(coords, n_neighbors)
+    (neighbor_distances, neighbors) = tree.query(coords, n_neighbors+1)
 
     # Vectors from each atom to its neighbors. Use periodic boundary conditions.
     vectors = coords[neighbors[:, 1:], :] - \
@@ -459,7 +484,7 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         psi_mean = np.mean(np.mean(psi, axis=0), axis=0)
         erf_sign = 2*(psi_mean[int(len(psi_mean)/2)] > psi_mean[0]) - 1
         (crossover, _) = fitting_erf(zpos, psi_mean, erf_sign)
-        if (reduce_flag and frame_num == 0):
+        if frame_num == 0:
             np.savetxt('crossover.txt', [crossover])
 
     # import matplotlib.pyplot as plt
@@ -548,7 +573,7 @@ def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
     tree = ss.cKDTree(coords, boxsize=box_sizes)
 
     # Get neighbor distances and neighbors
-    (neighbor_distances, neighbors) = tree.query(coords, n_neighbors)
+    (neighbor_distances, neighbors) = tree.query(coords, n_neighbors+1)
 
     # Vectors from each atom to its neighbors. Use periodic boundary conditions.
     vectors = coords[neighbors[:, 1:], :] - \
@@ -614,7 +639,7 @@ def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         psi_mean = np.mean(psi, axis=0)
         erf_sign = 2*(psi_mean[int(len(psi_mean)/2)] > psi_mean[0]) - 1
         (crossover, _) = fitting_erf(zpos, psi_mean, erf_sign)
-        if (reduce_flag and frame_num == 0):
+        if frame_num == 0:
             np.savetxt('crossover.txt', [crossover])
 
     # Interface heights for each interface
