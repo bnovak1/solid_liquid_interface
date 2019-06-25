@@ -32,10 +32,8 @@ def get_boundary_atoms(coordsz, latparam):
 
 
 def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vectors_ref,
-                  tree_ref, smoothing_cutoff, crossover, interface_options, outfile_prefix,
-                  psi_avg_flag, reduce_flag=True):
-
-    print(traj_file)
+                  tree_ref, smoothing_cutoff, interface_options, outfile_prefix,
+                  crossover=None, interface_range=None):
 
     # Read trajectory frame
     snapshot = mdtraj.load_lammpstrj(traj_file, top=topfile)
@@ -70,18 +68,10 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
                              0:box_sizes[0][1]:latparam/2,
                              0:box_sizes[0][2]:latparam/2]
 
-
-    if psi_avg_flag:
-        psi_avg = sli.interface_positions_2D(coords, box_sizes, snapshot, n_neighbors,
-                                    latparam, vectors_ref, tree_ref, X, Y, Z,
-                                    smoothing_cutoff, crossover, interface_options,
-                                    outfile_prefix, psi_avg_flag, reduce_flag)
-        return psi_avg
-    else:
-        height = sli.interface_positions_2D(coords, box_sizes, snapshot, n_neighbors,
-                                    latparam, vectors_ref, tree_ref, X, Y, Z,
-                                    smoothing_cutoff, crossover, interface_options,
-                                    outfile_prefix, psi_avg_flag, reduce_flag)
+    height = sli.interface_positions_2D(frame, coords, box_sizes, snapshot, n_neighbors,
+                                        latparam, vectors_ref, tree_ref, X, Y, Z,
+                                        smoothing_cutoff, interface_options,
+                                        outfile_prefix, crossover, reduce_flag=False)
 
     height_avg = np.mean(np.mean(height, axis=0), axis=0)
 
@@ -113,28 +103,31 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
 
     # Interface concentrations
     if interface_options['conc_flag']:
+
+        if frame == 0:
+            sli.visualize_bins(box_sizes, latparam, interface_options, height)
+
         concs = sli.interface_concentrations(snapshot, interfaces, interface_options)
+
         if interface_options['free_boundaries']:
             return [height_avg, concs, system_depth]
         else:
             return [height_avg, concs]
+
     else:
+
         if interface_options['free_boundaries']:
             return height_avg
         else:
             return [height_avg, system_depth]
 
 
-if __name__ == "__main__":
-
-    # Name of input file from command line
-    infile = sys.argv[1]
+def main(infile):
 
     with open(infile) as f:
         inputs = json.load(f)
 
     interface_options = inputs['interface_options']
-    psi_avg_flag = inputs['psi_avg_flag']
     latparam = inputs['latparam']
 
     interface_options['interface_flag'] = \
@@ -188,88 +181,87 @@ if __name__ == "__main__":
 
     # First frame
     output1 = analyze_frame(nframes, 0, traj_files[0], traj_top_file,
-                           inputs['n_neighbors'],  latparam, vectors_ref,
-                           tree_ref, inputs['smoothing_cutoff'], inputs['crossover'],
-                           interface_options, inputs['outfile_prefix'], psi_avg_flag, False)
+                            inputs['n_neighbors'],  latparam, vectors_ref,
+                           tree_ref, inputs['smoothing_cutoff'],
+                           interface_options, inputs['outfile_prefix'])
 
     # Rest of frames
     output2 = Parallel(n_jobs=inputs['nthreads']) \
               (delayed(analyze_frame) \
                (nframes, frame, traj_files[frame], traj_top_file,
                 inputs['n_neighbors'], latparam, vectors_ref, tree_ref,
-                inputs['smoothing_cutoff'], inputs['crossover'],
-                interface_options, inputs['outfile_prefix'], psi_avg_flag, False) \
+                inputs['smoothing_cutoff'],
+                interface_options, inputs['outfile_prefix']) \
                for frame in range(1, nframes))
 
-    if psi_avg_flag:
+    n_layers = interface_options['n_layers']
 
-        # Combine first and subsequent frame data, average psi over frames, save
-        psi_avg = np.mean(np.hstack((output1, output2)))
-        np.savetxt(inputs['outfile_prefix'] + '.dat', [psi_avg],
-                   header='Average value of psi')
+    # Combine first and subsequent frame data
+    if interface_options['conc_flag']:
+
+        height = np.vstack((output1[0],
+                            np.array([output2[i][0] for i in range(nframes-1)])))
+
+        conc = np.vstack((output1[1],
+                              np.array([output2[i][1] for i in range(nframes-1)])))
+
+        # Save concentrations to file
+        cols = ['frame']
+        nbins = (n_layers-1)*interface_options['nbins_per_layer'] + 1
+        for ibin in range(nbins):
+            #for phase in ['E', 'C']:
+            for interface in ['L', 'U']:
+                for iname in range(n_names-1):
+                    code = interface + str(ibin) + \
+                               interface_options['atom_name_list'][iname]
+                    cols.append(code)
+
+        with open(inputs['outfile_prefix'] + '_concs.dat', 'w') as f:
+            f.write('Codes: 1st is interface (L=lower, U=upper), '+ \
+                    #'2nd is layer (0=at interface, 1=one layer from interface, ...), ' + \
+                    '2nd is bin (edge to center, middle is around interface boundary), ' + \
+                    #'3rd is phase (E=phase at edge of box, C=phase in center of box), ' + \
+                    'Last is the atom name.\n')
+        outdata = pd.DataFrame(columns=cols)
+        outdata[cols[0]] = range(nframes)
+        outdata[cols[1:]] = conc
+
+        outdata.to_csv(inputs['outfile_prefix'] + '_concs.dat', mode='a', index=False, sep=str(' '))
+
+        if interface_options['free_boundaries']:
+            system_depth = np.hstack((output1[2], np.array([output2[i][2] for i in range(nframes-1)])))
 
     else:
 
-        n_layers = interface_options['n_layers']
-
-        # Combine first and subsequent frame data
-        if interface_options['conc_flag']:
+        if interface_options['free_boundaries']:
 
             height = np.vstack((output1[0],
                                 np.array([output2[i][0] for i in range(nframes-1)])))
 
-            conc = np.vstack((output1[1],
-                                  np.array([output2[i][1] for i in range(nframes-1)])))
-
-            # Save concentrations to file
-            cols = ['frame']
-            nbins = (n_layers-1)*interface_options['nbins_per_layer'] + 1
-            for ibin in range(nbins):
-                #for phase in ['E', 'C']:
-                for interface in ['L', 'U']:
-                    for iname in range(n_names-1):
-                        code = interface + str(ibin) + \
-                                   interface_options['atom_name_list'][iname]
-                        cols.append(code)
-
-            with open(inputs['outfile_prefix'] + '_concs.dat', 'w') as f:
-                f.write('Codes: 1st is interface (L=lower, U=upper), '+ \
-                        #'2nd is layer (0=at interface, 1=one layer from interface, ...), ' + \
-                        '2nd is bin (edge to center, middle is around interface boundary), ' + \
-                        #'3rd is phase (E=phase at edge of box, C=phase in center of box), ' + \
-                        'Last is the atom name.\n')
-            outdata = pd.DataFrame(columns=cols)
-            outdata[cols[0]] = range(nframes)
-            outdata[cols[1:]] = conc
-
-            outdata.to_csv(inputs['outfile_prefix'] + '_concs.dat', mode='a', index=False, sep=str(' '))
-
-            if interface_options['free_boundaries']:
-                system_depth = np.hstack((output1[2], np.array([output2[i][2] for i in range(nframes-1)])))
+            system_depth = np.vstack((output1[1],
+                                      np.array([output2[i][1] for i in range(nframes-1)])))
 
         else:
 
-            if interface_options['free_boundaries']:
+            height = np.vstack((output1, np.array(output2)))
 
-                height = np.vstack((output1[0],
-                                    np.array([output2[i][0] for i in range(nframes-1)])))
-
-                system_depth = np.vstack((output1[1],
-                                          np.array([output2[i][1] for i in range(nframes-1)])))
-
-            else:
-
-                height = np.vstack((output1, np.array(output2)))
-
-        del output1, output2
+    del output1, output2
 
 
-        # Save interface positions to file
-        outdata = np.column_stack((range(nframes), height))
-        np.savetxt(inputs['outfile_prefix'] + '_pos.dat', outdata,
-                   header='Frame | Interface postions (angstroms) for lower and upper interfaces')
+    # Save interface positions to file
+    outdata = np.column_stack((range(nframes), height))
+    np.savetxt(inputs['outfile_prefix'] + '_pos.dat', outdata,
+               header='Frame | Interface postions (angstroms) for lower and upper interfaces')
 
-        # Save system depth to file
-        outdata = np.column_stack((range(nframes), system_depth))
-        np.savetxt(inputs['outfile_prefix'] + '_sys_depth.dat', outdata,
-                   header='Frame | System depth (angstroms)')
+    # Save system depth to file
+    outdata = np.column_stack((range(nframes), system_depth))
+    np.savetxt(inputs['outfile_prefix'] + '_sys_depth.dat', outdata,
+               header='Frame | System depth (angstroms)')
+
+
+if __name__ == "__main__":
+
+    # Name of input file from command line
+    infile = sys.argv[1]
+
+    main(infile)

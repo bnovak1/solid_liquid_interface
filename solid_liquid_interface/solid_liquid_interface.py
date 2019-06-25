@@ -60,11 +60,12 @@ def visualize_bins(box_sizes, latparam, interface_options, height):
     (X, Y) = np.mgrid[0:box_sizes[0][0]:latparam/2, 0:box_sizes[0][1]:latparam/2]
 
     colors = ['b', 'g', 'r', 'k', 'm', 'c', 'y']
-    for ilayer in range(interface_options['n_layers']):
+    for ilayer in range(interface_options['n_layers']-1):
         for ibin in range(interface_options['nbins_per_layer']):
             ax.plot_surface(X, Y, height[:, :, 0]+ ilayer*1.439725 + ibin*1.439725/3,
                             color=colors[ibin])
     ax.plot_surface(X, Y, height[:, :, 0]+ (ilayer+1)*1.439725 + 0*1.439725/3, color=colors[0])
+    ax.plot_wireframe(X, Y, height[:, :, 0]+ (ilayer+1)*1.439725 + 0*1.439725/3)
 
     ax.set_xlabel('x ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)
     ax.set_ylabel('y ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)

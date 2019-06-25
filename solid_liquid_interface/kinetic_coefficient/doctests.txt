@@ -1,0 +1,41 @@
+2D interface, 4 threads
+
+    >>> import numpy as np
+    >>> import solidification_concentration as solc
+    >>> solc.main('tests/traj_analysis.json')
+
+    concentrations
+    >>> conc = np.loadtxt('test_concs.dat', skiprows=2)
+    >>> conc_test = np.loadtxt('tests/results_TiNi/test_concs.dat', skiprows=2)
+    >>> np.allclose(conc, conc_test)
+    True
+
+    phi order parameter
+    >>> phi = np.loadtxt('test_phi.dat')
+    >>> phi_test = np.loadtxt('tests/results_TiNi/test_phi.dat')
+    >>> np.allclose(phi, phi_test)
+    True
+
+    psi order parameter
+    >>> psi = np.loadtxt('test_psi.dat')
+    >>> psi_test = np.loadtxt('tests/results_TiNi/test_psi.dat')
+    >>> np.allclose(psi, psi_test)
+    True
+
+    interface positions
+    >>> pos = np.loadtxt('test_pos.dat')
+    >>> pos_test = np.loadtxt('tests/results_TiNi/test_pos.dat')
+    >>> np.allclose(pos, pos_test)
+    True
+
+    system depths
+    >>> depth = np.loadtxt('test_sys_depth.dat')
+    >>> depth_test = np.loadtxt('tests/results_TiNi/test_sys_depth.dat')
+    >>> np.allclose(depth, depth_test)
+    True
+
+Delete output files from above tests
+
+    >>> import os, glob
+    >>> file_list = glob.glob('test_*.dat') + glob.glob('crossover.txt') + glob.glob('interface_*.*')
+    >>> for file in file_list: os.remove(file)
