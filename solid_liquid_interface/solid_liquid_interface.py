@@ -56,16 +56,20 @@ def visualize_bins(box_sizes, latparam, interface_options, height):
     import matplotlib.pyplot as plt
     import my_plot_settings_article as mpsa
 
+    layer_width = interface_options['layer_width']
+    nbins_per_layer = interface_options['nbins_per_layer']
+
     ax = plt.axes(projection='3d')
     (X, Y) = np.mgrid[0:box_sizes[0][0]:latparam/2, 0:box_sizes[0][1]:latparam/2]
 
     colors = ['b', 'g', 'r', 'k', 'm', 'c', 'y']
     for ilayer in range(interface_options['n_layers']-1):
-        for ibin in range(interface_options['nbins_per_layer']):
-            ax.plot_surface(X, Y, height[:, :, 0]+ ilayer*1.439725 + ibin*1.439725/3,
+        for ibin in range(nbins_per_layer):
+            ax.plot_surface(X, Y,
+                            height[:, :, 0] + ilayer*layer_width + ibin*layer_width/nbins_per_layer,
                             color=colors[ibin])
-    ax.plot_surface(X, Y, height[:, :, 0]+ (ilayer+1)*1.439725 + 0*1.439725/3, color=colors[0])
-    ax.plot_wireframe(X, Y, height[:, :, 0]+ (ilayer+1)*1.439725 + 0*1.439725/3)
+    ax.plot_surface(X, Y, height[:, :, 0]+ (ilayer+1)*layer_width, color=colors[0])
+    ax.plot_wireframe(X, Y, height[:, :, 0]+ (ilayer+1)*layer_width)
 
     ax.set_xlabel('x ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)
     ax.set_ylabel('y ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)
@@ -118,7 +122,7 @@ def interface_concentrations(snapshot, interfaces, interface_options):
         for iint in range(2):
 
             ind = interfaces[iint, ibin]
-            natoms = len(ind)
+            natoms = float(len(ind))
 
             for iname in range(n_names-1):
                 concs[cnt] = np.sum(atom_names[ind] == \
@@ -188,10 +192,10 @@ def find_interfacial_atoms_2D_nearest(x, y, height, coords, traj_file, snapshot,
     n_layers = interface_options['n_layers']
     nbins_per_layer = interface_options['nbins_per_layer']
     nbins = (n_layers - 1)*nbins_per_layer + 1
+    bin_width = interface_options['layer_width']
 
     interfaces = np.empty((2, nbins), dtype=object)
 
-    bin_width = np.max(list(interface_options['r_atoms'].values()))
 
     for iint in range(2):
 
@@ -209,7 +213,7 @@ def find_interfacial_atoms_2D_nearest(x, y, height, coords, traj_file, snapshot,
             lower_shift = -bin_width*(n_layers/2.0 - ibin/nbins_per_layer)
             upper_shift = lower_shift + bin_width
 
-            ind = np.intersect1d(np.where(coords[atoms, 2] > interface_projections + lower_shift)[0],
+            ind = np.intersect1d(np.where(coords[atoms, 2] >= interface_projections + lower_shift)[0],
                                  np.where(coords[atoms, 2] < interface_projections + upper_shift)[0])
 
             interfaces[iint, ibin] = atoms[ind]

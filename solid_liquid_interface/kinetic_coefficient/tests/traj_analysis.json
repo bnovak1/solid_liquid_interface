@@ -20,6 +20,7 @@
         },
         "n_layers": 13,
         "nbins_per_layer": 3,
+        "layer_width": 1.4325,
         "ITIM": {
             "r_probe": 1.1925,
             "grid_spacing": 0.12
