@@ -1,0 +1,30 @@
+{
+    "traj_dir": "tests/traj_TiNi",
+    "reference_prefix": "reference",
+    "traj_pattern": "solidification_0.07.*.lammpstrj",
+    "traj_top_file": "solidification_0.07.0.pdb",
+    "temp": 1613.0,
+    "latparam": 3.30516112427509,
+    "n_neighbors": 14,
+    "smoothing_cutoff": 8.262902810687724,
+    "outfile_prefix": "test",
+    "dimension": 2,
+    "interface_options": {
+        "traj_flag": false,
+        "conc_flag": true,
+        "free_boundaries": true,
+        "algorithm": "nearest",
+        "r_atoms": {
+            "Ti": 1.4325,
+            "Ni": 1.1925
+        },
+        "n_layers": 5,
+        "nbins_per_layer": 4,
+        "layer_width": 2.865,
+        "ITIM": {
+            "r_probe": 1.1925,
+            "grid_spacing": 0.12
+        }
+    },
+    "nthreads": 4
+}
