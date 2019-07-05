@@ -50,11 +50,15 @@ def get_ref_vectors(n_neighbors, reference_structure, topfile):
     return (vectors_ref, tree_ref)
 
 
-def visualize_bins(box_sizes, latparam, interface_options, height):
+def visualize_bins(box_sizes, latparam, interface_options, height, outfile_prefix):
 
     from mpl_toolkits import mplot3d
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
+    from matplotlib.ticker import MultipleLocator
     import my_plot_settings_article as mpsa
+
+    mpl.rcParams['font.size'] = 8
 
     layer_width = interface_options['layer_width']
     nbins_per_layer = interface_options['nbins_per_layer']
@@ -69,14 +73,34 @@ def visualize_bins(box_sizes, latparam, interface_options, height):
                             height[:, :, 0] + ilayer*layer_width + ibin*layer_width/nbins_per_layer,
                             color=colors[ibin])
     ax.plot_surface(X, Y, height[:, :, 0]+ (ilayer+1)*layer_width, color=colors[0])
-    ax.plot_wireframe(X, Y, height[:, :, 0]+ (ilayer+1)*layer_width)
+    ax.plot_wireframe(X, Y, height[:, :, 0]+ (ilayer+1)*layer_width, linewidth=0.3, color='0.5')
 
-    ax.set_xlabel('x ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)
-    ax.set_ylabel('y ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)
-    ax.set_zlabel('z ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)
+    xticks = ax.get_xticks()
+    xtick_spacking = 2*(xticks[1] - xticks[0])
+    yticks = ax.get_yticks()
+    ytick_spacking = 2*(yticks[1] - yticks[0])
+    zticks = ax.get_zticks()
+    ztick_spacking = 2*(zticks[1] - zticks[0])
+
+    ml = MultipleLocator(xtick_spacking); ax.xaxis.set_major_locator(ml)
+    ml = MultipleLocator(ytick_spacking); ax.yaxis.set_major_locator(ml)
+    ml = MultipleLocator(ztick_spacking); ax.zaxis.set_major_locator(ml)
+
+    # ax.set_xticks(xticks[::2])
+    # ax.set_yticks(yticks[::2])
+    # ax.set_zticks(zticks[::2])
+    #
+    # ax.set_xticklabels(xticks.astype(str))
+    # ax.set_yticklabels(yticks.astype(str))
+    # ax.set_zticklabels(zticks.astype(str))
+    # import pdb; pdb.set_trace()
+
+    ax.set_xlabel('x ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)#, fontsize=7)
+    ax.set_ylabel('y ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)#, fontsize=7)
+    ax.set_zlabel('z ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)#, fontsize=7)
     ax.dist = 14
 
-    mpsa.save_figure('bins.png', 300)
+    mpsa.save_figure(outfile_prefix + '_bins.png', 300)
     plt.close()
 
 
@@ -481,7 +505,7 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         interface_widths = np.array([fitting_erf(zpos, psi_flat[ifit, :], erf_sign)[1] \
                                      for ifit in range(nfits)]).flatten()
         del zpos, psi_flat
-        np.savetxt('interface_width.dat', [np.mean(interface_widths)])
+        np.savetxt(outfile_prefix + '_interface_width.dat', [np.mean(interface_widths)])
 
     # Crossover value for psi by fitting to error functions
     if (reduce_flag and frame_num == 0) or not reduce_flag:
@@ -490,7 +514,7 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         erf_sign = 2*(psi_mean[int(len(psi_mean)/2)] > psi_mean[0]) - 1
         (crossover, _) = fitting_erf(zpos, psi_mean, erf_sign)
         if frame_num == 0:
-            np.savetxt('crossover.txt', [crossover])
+            np.savetxt(outfile_prefix + '_crossover.txt', [crossover])
 
     # import matplotlib.pyplot as plt
     # plt.plot(Z[0, 0, :], np.mean(np.mean(psi, axis=0), axis=0), '.-')
@@ -519,12 +543,12 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
             height[ix, iy, 1] = fit[0]*crossover + fit[1]
 
     if frame_num == 0:
-        interface_range_2D(height, smoothing_cutoff, latparam)
+        interface_range_2D(height, smoothing_cutoff, latparam, outfile_prefix)
 
     return height
 
 
-def interface_range_2D(height, smoothing_cutoff, latparam):
+def interface_range_2D(height, smoothing_cutoff, latparam, outfile_prefix):
 
     hmin = np.min(np.min(height, axis=0), axis=0)
     hmax = np.max(np.max(height, axis=0), axis=0)
@@ -533,7 +557,7 @@ def interface_range_2D(height, smoothing_cutoff, latparam):
     hmean = np.mean(np.mean(height, axis=0), axis=0)
     interface_range = np.column_stack((hmean - hrng_half, hmean + hrng_half))
 
-    np.savetxt('interface_range.txt', interface_range)
+    np.savetxt(outfile_prefix + '_interface_range.txt', interface_range)
 
 
 def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, latparam,

@@ -105,7 +105,7 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
     if interface_options['conc_flag']:
 
         if frame == 0:
-            sli.visualize_bins(box_sizes, latparam, interface_options, height)
+            sli.visualize_bins(box_sizes, latparam, interface_options, height, outfile_prefix)
 
         concs = sli.interface_concentrations(snapshot, interfaces, interface_options)
 
