@@ -107,18 +107,18 @@ def visualize_bins(box_sizes, latparam, interface_options, height, outfile_prefi
 def save_pdb(traj_file, coords, snapshot, interface_options, interfaces):
 
         natoms = coords.shape[0]
-        n_layers = interface_options['n_layers']
+        nbins = interfaces[0].shape[0]
         bfactors = np.zeros(natoms)
 
         for iint in range(2):
 
             beta = 0.0
 
-            for ilayer in range(n_layers):
+            for ibin in range(nbins):
 
                 beta += 1.0
 
-                ind = interfaces[iint, ilayer]
+                ind = interfaces[iint, ibin]
                 bfactors[ind] = beta
 
 
