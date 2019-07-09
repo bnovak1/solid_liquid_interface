@@ -1,0 +1,20 @@
+{
+    "LATTICE_TYPE": "bcc",
+    "ELEMENTS": [
+        "Ni",
+        "Ti"
+    ],
+    "CONCS": [
+        "0.04",
+        "0.05",
+        "0.06",
+        "0.07",
+        "0.08",
+        "0.09",
+        "0.10"
+    ],
+    "ORIENTATIONS": {
+        "1": "x 0 1 0 orient y 0 0 1 orient z 1 0 0"
+    },
+    "CODE_DIRECTORY": "/home/bnovak1/CODE/Work/SIMULATIONS/CIMM/solid_liquid_interface/kinetic_coefficient/TiNi_MEAM_ours_2019/solidification_concentrations/reduce_liq_conc"
+}

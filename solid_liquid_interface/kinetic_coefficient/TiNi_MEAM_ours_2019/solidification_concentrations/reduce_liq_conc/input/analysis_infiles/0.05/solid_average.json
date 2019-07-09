@@ -1,0 +1,30 @@
+{
+    "traj_dir": "data_file/0.05/kinetic/extra/all_solid/",
+    "reference_prefix": "reference",
+    "traj_pattern": "solidification_0.05.*.lammpstrj",
+    "traj_top_file": "solidification_0.05.0.pdb",
+    "temp": 1613.0,
+    "latparam": 3.30516112427509,
+    "n_neighbors": 14,
+    "smoothing_cutoff": 8.262902810687724,
+    "crossover": 0.086285,
+    "outfile_prefix": "../analysis/0.05/solid_average",
+    "psi_avg_flag": true,
+    "dimension": 2,
+    "interface_options": {
+        "traj_flag": false,
+        "conc_flag": false,
+        "free_boundaries": true,
+        "algorithm": "nearest",
+        "r_atoms": {
+            "Ti": 1.4325,
+            "Ni": 1.1925
+        },
+	"ITIM": {
+            "r_probe": 1.1925,
+            "grid_spacing": 0.12,
+            "n_layers": 1
+        }
+    },
+    "nthreads": 8
+}

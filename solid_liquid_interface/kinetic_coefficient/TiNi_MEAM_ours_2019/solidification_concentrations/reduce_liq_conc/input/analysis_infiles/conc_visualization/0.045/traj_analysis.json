@@ -1,0 +1,30 @@
+{
+    "traj_dir": "data_files/conc_visualization/0.045/",
+    "reference_prefix": "reference",
+    "traj_pattern": "solidification_0.045.*.lammpstrj",
+    "traj_top_file": "solidification_0.045.6000.pdb",
+    "temp": 1613.0,
+    "latparam": 3.30516112427509,
+    "n_neighbors": 14,
+    "smoothing_cutoff": 8.262902810687724,
+    "outfile_prefix": "../analysis/conc_visualization/0.045/interface",
+    "dimension": 2,
+    "interface_options": {
+        "traj_flag": true,
+        "conc_flag": true,
+        "free_boundaries": true,
+        "algorithm": "nearest",
+        "r_atoms": {
+            "Ti": 1.4325,
+            "Ni": 1.1925
+        },
+        "n_layers": 7,
+        "nbins_per_layer": 1,
+        "layer_width": 2.865,
+        "ITIM": {
+            "r_probe": 1.1925,
+            "grid_spacing": 0.12
+        }
+    },
+    "nthreads": 4
+}

@@ -1,0 +1,30 @@
+{
+    "traj_dir": "traj-1749/orientation1/dt-300/",
+    "reference_prefix": "reference",
+    "traj_pattern": "solidification_1749_300.*.lammpstrj",
+    "traj_top_file": "solidification_1749.pdb",
+    "temp": 1749.0,
+    "latparam": 3.31066454334608,
+    "n_neighbors": 14,
+    "smoothing_cutoff": 8.2766613583652,
+    "crossover": 0.08059082975532034,
+    "outfile_prefix": "../analysis/orientation1/dt-300/interface",
+    "psi_avg_flag": false,
+    "dimension": 2,
+    "interface_options": {
+        "traj_flag": false,
+        "conc_flag": true,
+        "free_boundaries": true,
+        "algorithm": "nearest",
+        "r_atoms": {
+            "Ti": 1.4325,
+            "Ni": 1.1725
+        },
+        "ITIM": {
+            "r_probe": 1.1725,
+            "grid_spacing": 0.12,
+            "n_layers": 1
+        }
+    },
+    "nthreads": 10
+}
