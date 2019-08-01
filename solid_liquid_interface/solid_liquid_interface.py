@@ -16,7 +16,7 @@ import mdtraj
 import numpy as np
 import pandas as pd
 import scipy.constants as constants
-import scipy.fftpack as fft
+# import scipy.fftpack as fft
 import scipy.interpolate as interp
 import scipy.spatial as ss
 import scipy.special as spec
@@ -505,14 +505,15 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         interface_widths = np.array([fitting_erf(zpos, psi_flat[ifit, :], erf_sign)[1] \
                                      for ifit in range(nfits)]).flatten()
         del zpos, psi_flat
-        np.savetxt(outfile_prefix + '_interface_width.dat', [np.mean(interface_widths)])
+        np.savetxt(outfile_prefix + '_interface_width_local.dat', [np.mean(interface_widths)])
 
-    # Crossover value for psi by fitting to error functions
+    # Crossover value for psi and interface widths by fitting to error functions
     if (reduce_flag and frame_num == 0) or not reduce_flag:
         zpos = Z[0, 0, :]
         psi_mean = np.mean(np.mean(psi, axis=0), axis=0)
         erf_sign = 2*(psi_mean[int(len(psi_mean)/2)] > psi_mean[0]) - 1
-        (crossover, _) = fitting_erf(zpos, psi_mean, erf_sign)
+        (crossover, interface_widths) = fitting_erf(zpos, psi_mean, erf_sign)
+        del zpos, psi_mean, erf_sign
         if frame_num == 0:
             np.savetxt(outfile_prefix + '_crossover.txt', [crossover])
 
@@ -545,7 +546,10 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
     if frame_num == 0:
         interface_range_2D(height, smoothing_cutoff, latparam, outfile_prefix)
 
-    return height
+    try:
+        return (height, interface_widths)
+    except UnboundLocalError:
+        return (height, -1)
 
 
 def interface_range_2D(height, smoothing_cutoff, latparam, outfile_prefix):
@@ -660,16 +664,17 @@ def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         nfits = psi.shape[0]
         interface_widths = np.array([fitting_erf(zpos, psi[ifit, :], erf_sign)[1] \
                                      for ifit in range(nfits)]).flatten()
-        np.savetxt('interface_width.dat', [np.mean(interface_widths)])
+        np.savetxt(outfile_prefix + '_interface_width_local.dat', [np.mean(interface_widths)])
 
     # Crossover value for psi by fitting to error functions
     if (reduce_flag and frame_num == 0) or not reduce_flag:
         zpos = Z[0, :]
         psi_mean = np.mean(psi, axis=0)
         erf_sign = 2*(psi_mean[int(len(psi_mean)/2)] > psi_mean[0]) - 1
-        (crossover, _) = fitting_erf(zpos, psi_mean, erf_sign)
+        (crossover, interface_widths) = fitting_erf(zpos, psi_mean, erf_sign)
+        del zpos, psi_mean, erf_sign
         if frame_num == 0:
-            np.savetxt('crossover.txt', [crossover])
+            np.savetxt(outfile_prefix + '_crossover.txt', [crossover])
 
     # Interface heights for each interface
     psi_grid = psi_grid.reshape(nx_grid, nz_grid, 2)
@@ -707,7 +712,10 @@ def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
             np.column_stack((hmean - interface_positions_1D.hrng_half,
                              hmean + interface_positions_1D.hrng_half))
 
-    return height
+    try:
+        return (height, interface_widths)
+    except UnboundLocalError:
+        return (height, -1)
 
 
 def a_squared(dimension, height):
@@ -718,7 +726,8 @@ def a_squared(dimension, height):
         height -= np.mean(height, axis=0)
 
         # Compute A^2 for each interface
-        Asq = np.abs(fft.fft(height, axis=0)/height.shape[0])**2
+        Asq = np.abs(np.fft.rfft(height, axis=0)/height.shape[0])**2
+
 
     elif dimension == 2:
 
@@ -726,6 +735,6 @@ def a_squared(dimension, height):
         height -= np.mean(np.mean(height, axis=0), axis=0)
 
         # Compute A^2 for each interface
-        Asq = np.abs(fft.fft2(height, axes=[0, 1])/np.product(height.shape[:2]))**2.0
+        Asq = np.abs(np.fft.fft2(height, axes=[0, 1])/np.product(height.shape[:2]))**2.0
 
     return Asq

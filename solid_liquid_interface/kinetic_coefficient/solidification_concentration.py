@@ -68,10 +68,11 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
                              0:box_sizes[0][1]:latparam/2,
                              0:box_sizes[0][2]:latparam/2]
 
-    height = sli.interface_positions_2D(frame, coords, box_sizes, snapshot, n_neighbors,
-                                        latparam, vectors_ref, tree_ref, X, Y, Z,
-                                        smoothing_cutoff, interface_options,
-                                        outfile_prefix, crossover, reduce_flag=False)
+    (height, interface_widths) = sli.interface_positions_2D(frame, coords, box_sizes, snapshot,
+                                                            n_neighbors, latparam, vectors_ref,
+                                                            tree_ref, X, Y, Z, smoothing_cutoff,
+                                                            interface_options, outfile_prefix,
+                                                            crossover, reduce_flag=False)
 
     height_avg = np.mean(np.mean(height, axis=0), axis=0)
 
@@ -110,16 +111,16 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
         concs = sli.interface_concentrations(snapshot, interfaces, interface_options)
 
         if interface_options['free_boundaries']:
-            return [height_avg, concs, system_depth]
+            return [height_avg, interface_widths, concs, system_depth]
         else:
-            return [height_avg, concs]
+            return [height_avg, interface_widths, concs]
 
     else:
 
         if interface_options['free_boundaries']:
-            return height_avg
+            return [height_avg, interface_widths]
         else:
-            return [height_avg, system_depth]
+            return [height_avg, interface_widths, system_depth]
 
 
 def main(infile):
@@ -197,13 +198,12 @@ def main(infile):
     n_layers = interface_options['n_layers']
 
     # Combine first and subsequent frame data
+    height = np.vstack((output1[0], np.array([output2[i][0] for i in range(nframes-1)])))
+    interface_widths = np.vstack((output1[1], np.array([output2[i][1] for i in range(nframes-1)])))
+
     if interface_options['conc_flag']:
 
-        height = np.vstack((output1[0],
-                            np.array([output2[i][0] for i in range(nframes-1)])))
-
-        conc = np.vstack((output1[1],
-                              np.array([output2[i][1] for i in range(nframes-1)])))
+        conc = np.vstack((output1[2], np.array([output2[i][2] for i in range(nframes-1)])))
 
         # Save concentrations to file
         cols = ['frame']
@@ -229,21 +229,15 @@ def main(infile):
         outdata.to_csv(inputs['outfile_prefix'] + '_concs.dat', mode='a', index=False, sep=str(' '))
 
         if interface_options['free_boundaries']:
-            system_depth = np.hstack((output1[2], np.array([output2[i][2] for i in range(nframes-1)])))
+            system_depth = np.hstack((output1[3],
+                                      np.array([output2[i][3] for i in range(nframes-1)])))
 
     else:
 
         if interface_options['free_boundaries']:
 
-            height = np.vstack((output1[0],
-                                np.array([output2[i][0] for i in range(nframes-1)])))
-
-            system_depth = np.vstack((output1[1],
-                                      np.array([output2[i][1] for i in range(nframes-1)])))
-
-        else:
-
-            height = np.vstack((output1, np.array(output2)))
+            system_depth = np.vstack((output1[2],
+                                      np.array([output2[i][2] for i in range(nframes-1)])))
 
     del output1, output2
 
@@ -253,10 +247,16 @@ def main(infile):
     np.savetxt(inputs['outfile_prefix'] + '_pos.dat', outdata,
                header='Frame | Interface postions (angstroms) for lower and upper interfaces')
 
+    # Save interface widths to file
+    outdata = np.column_stack((range(nframes), interface_widths))
+    np.savetxt(inputs['outfile_prefix'] + '_interface_widths.dat', outdata,
+               header='Frame | Interface widths (angstroms) for lower and upper interfaces')
+
     # Save system depth to file
-    outdata = np.column_stack((range(nframes), system_depth))
-    np.savetxt(inputs['outfile_prefix'] + '_sys_depth.dat', outdata,
-               header='Frame | System depth (angstroms)')
+    if interface_options['free_boundaries']:
+        outdata = np.column_stack((range(nframes), system_depth))
+        np.savetxt(inputs['outfile_prefix'] + '_sys_depth.dat', outdata,
+                   header='Frame | System depth (angstroms)')
 
 
 if __name__ == "__main__":

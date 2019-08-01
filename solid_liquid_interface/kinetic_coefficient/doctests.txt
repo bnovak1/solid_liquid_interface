@@ -109,5 +109,5 @@
 Delete output files from above tests
 
     >>> import os, glob
-    >>> file_list = glob.glob('test_*.dat') + glob.glob('crossover.txt') + glob.glob('interface_*.*')
+    >>> file_list = glob.glob('test_*.*')
     >>> for file in file_list: os.remove(file)
