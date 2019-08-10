@@ -86,15 +86,6 @@ def visualize_bins(box_sizes, latparam, interface_options, height, outfile_prefi
     ml = MultipleLocator(ytick_spacking); ax.yaxis.set_major_locator(ml)
     ml = MultipleLocator(ztick_spacking); ax.zaxis.set_major_locator(ml)
 
-    # ax.set_xticks(xticks[::2])
-    # ax.set_yticks(yticks[::2])
-    # ax.set_zticks(zticks[::2])
-    #
-    # ax.set_xticklabels(xticks.astype(str))
-    # ax.set_yticklabels(yticks.astype(str))
-    # ax.set_zticklabels(zticks.astype(str))
-    # import pdb; pdb.set_trace()
-
     ax.set_xlabel('x ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)#, fontsize=7)
     ax.set_ylabel('y ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)#, fontsize=7)
     ax.set_zlabel('z ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)#, fontsize=7)
@@ -346,54 +337,66 @@ def residual(params, pos, order_param, wghts, erf_sign):
     return residuals
 
 
-def fitting_erf(pos, order_param, erf_sign):
+def fitting_erf(pos, order_param, erf_sign, order_params_ini=[]):
 
     wghts = np.ones(len(pos))  # All weights equal
     params = lmfit.Parameters()
 
     pos_min = np.min(pos)
     delta_pos = np.max(pos) - pos_min
-    order_param_sol_ini = np.max(order_param)
-    order_param_liq_ini = np.min(order_param)
+
+    if len(order_params_ini) == 0:
+        order_param_sol_ini = np.max(order_param)
+        order_param_liq_ini = np.min(order_param)
+        params.add('order_param_sol', value=order_param_sol_ini, min=0.0)
+        params.add('order_param_liq', value=order_param_liq_ini, min=0.0)
+    else:
+        order_param_sol_ini = np.max(order_params_ini)
+        order_param_liq_ini = np.min(order_params_ini)
+        params.add('order_param_sol', value=order_param_sol_ini, vary=False)
+        params.add('order_param_liq', value=order_param_liq_ini, vary=False)
+
     fliq = (np.mean(order_param) - order_param_sol_ini)/ \
            (order_param_liq_ini - order_param_sol_ini)
     fsol = 1 - fliq
+
     pos_interface_lower_ini = delta_pos*((fliq/2)*(erf_sign==1) + \
                                          (fsol/2)*(erf_sign==-1)) + pos_min
     pos_interface_upper_ini = delta_pos*((1 - fliq/2)*(erf_sign==1) + \
                                          (1 - fsol/2)*(erf_sign==-1)) + pos_min
-
-    params.add('order_param_sol', value=order_param_sol_ini, min=0.0)
-    params.add('order_param_liq', value=order_param_liq_ini, min=0.0)
     params.add('pos_interface_lower', value=pos_interface_lower_ini)
     params.add('pos_interface_upper', value=pos_interface_upper_ini)
-    params.add('sigma_lower', value=3.0, min=0.0)
-    params.add('sigma_upper', value=3.0, min=0.0)
+
+    params.add('sigma_lower', value=5.0, min=0.0)
+    params.add('sigma_upper', value=5.0, min=0.0)
     params.add('pos_bound', value=np.mean(pos))
 
     fit = lmfit.minimize(residual, params, args=(pos, order_param, wghts, erf_sign))
 
-    crossover = (fit.params['order_param_liq'].value + \
-                 fit.params['order_param_sol'].value)/2
+    order_param_sol = fit.params['order_param_sol'].value
+    order_param_liq = fit.params['order_param_liq'].value
+    crossover = (order_param_sol + order_param_liq)/2
     multiplier = 2*np.sqrt(2)*spec.erfinv(0.99)
     interface_widths = multiplier*np.array([fit.params['sigma_upper'].value,
                                             fit.params['sigma_lower'].value])
 
-    # import matplotlib.pyplot as plt
-    # plt.plot(pos, order_param)
-    # plt.plot(pos, erf_fit_func(fit.params['order_param_sol'].value,
-    #                            fit.params['order_param_liq'].value,
-    #                            fit.params['pos_bound'].value,
-    #                            pos,
-    #                            fit.params['pos_interface_lower'].value,
-    #                            fit.params['pos_interface_upper'].value,
-    #                            fit.params['sigma_lower'].value,
-    #                            fit.params['sigma_upper'].value,
-    #                            erf_sign))
-    # plt.show()
-    # import pdb; pdb.set_trace()
+    # if interface_widths.max() > 40:
+    #     import matplotlib.pyplot as plt
+    #     plt.plot(pos, order_param)
+    #     plt.plot(pos, erf_fit_func(fit.params['order_param_sol'].value,
+    #                                fit.params['order_param_liq'].value,
+    #                                fit.params['pos_bound'].value,
+    #                                pos,
+    #                                fit.params['pos_interface_lower'].value,
+    #                                fit.params['pos_interface_upper'].value,
+    #                                fit.params['sigma_lower'].value,
+    #                                fit.params['sigma_upper'].value,
+    #                                erf_sign))
+    #     plt.title(str(interface_widths))
+    #     plt.show()
+    #     import pdb; pdb.set_trace()
 
-    return (crossover, interface_widths)
+    return (crossover, interface_widths, [order_param_sol, order_param_liq])
 
 
 def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, latparam,
@@ -497,23 +500,23 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         np.savetxt(outfile_prefix + '_phi.dat', outdata)
         del outdata
 
-        zpos = Z[0, 0, :]
-        psi_flat = psi.reshape(-1, psi.shape[2])
-        erf_sign = 2*(psi_flat[0, int(len(zpos)/2)] > psi_flat[0, 0]) - 1
-        nfits = psi_flat.shape[0]
-
-        interface_widths = np.array([fitting_erf(zpos, psi_flat[ifit, :], erf_sign)[1] \
-                                     for ifit in range(nfits)]).flatten()
-        del zpos, psi_flat
-        np.savetxt(outfile_prefix + '_interface_width_local.dat', [np.mean(interface_widths)])
-
     # Crossover value for psi and interface widths by fitting to error functions
     if (reduce_flag and frame_num == 0) or not reduce_flag:
+
         zpos = Z[0, 0, :]
         psi_mean = np.mean(np.mean(psi, axis=0), axis=0)
         erf_sign = 2*(psi_mean[int(len(psi_mean)/2)] > psi_mean[0]) - 1
-        (crossover, interface_widths) = fitting_erf(zpos, psi_mean, erf_sign)
-        del zpos, psi_mean, erf_sign
+        (crossover, interface_widths, order_param_limits) = fitting_erf(zpos, psi_mean, erf_sign)
+
+        psi_flat = psi.reshape(-1, psi.shape[2])
+        nfits = psi_flat.shape[0]
+        interface_widths_local = np.array([fitting_erf(zpos, psi_flat[ifit, :], erf_sign,
+                                                       order_param_limits)[1] \
+                                           for ifit in range(nfits)])
+        interface_widths_local = np.mean(interface_widths_local, axis=0)
+
+        del zpos, psi_mean, erf_sign, psi_flat
+
         if frame_num == 0:
             np.savetxt(outfile_prefix + '_crossover.txt', [crossover])
 
@@ -547,9 +550,9 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         interface_range_2D(height, smoothing_cutoff, latparam, outfile_prefix)
 
     try:
-        return (height, interface_widths)
+        return (height, interface_widths, interface_widths_local)
     except UnboundLocalError:
-        return (height, -1)
+        return (height, -1, -1)
 
 
 def interface_range_2D(height, smoothing_cutoff, latparam, outfile_prefix):
@@ -659,20 +662,22 @@ def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         outdata = np.column_stack((psi_grid[nz_grid:2*nz_grid, 1], psi[1, :]))
         np.savetxt(outfile_prefix + '_psi.dat', outdata)
 
-        zpos = Z[0, :]
-        erf_sign = 2*(psi[0, int(len(zpos)/2)] > psi[0, 0]) - 1
-        nfits = psi.shape[0]
-        interface_widths = np.array([fitting_erf(zpos, psi[ifit, :], erf_sign)[1] \
-                                     for ifit in range(nfits)]).flatten()
-        np.savetxt(outfile_prefix + '_interface_width_local.dat', [np.mean(interface_widths)])
 
     # Crossover value for psi by fitting to error functions
     if (reduce_flag and frame_num == 0) or not reduce_flag:
         zpos = Z[0, :]
         psi_mean = np.mean(psi, axis=0)
         erf_sign = 2*(psi_mean[int(len(psi_mean)/2)] > psi_mean[0]) - 1
-        (crossover, interface_widths) = fitting_erf(zpos, psi_mean, erf_sign)
+        (crossover, interface_widths, order_param_limits) = fitting_erf(zpos, psi_mean, erf_sign)
+
+        nfits = psi.shape[0]
+        interface_widths_local = np.array([fitting_erf(zpos, psi[ifit, :], erf_sign,
+                                                       order_param_limits)[1] \
+                                           for ifit in range(nfits)])
+        interface_widths_local = np.mean(interface_widths_local, axis=0)
+
         del zpos, psi_mean, erf_sign
+
         if frame_num == 0:
             np.savetxt(outfile_prefix + '_crossover.txt', [crossover])
 
@@ -713,9 +718,9 @@ def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
                              hmean + interface_positions_1D.hrng_half))
 
     try:
-        return (height, interface_widths)
+        return (height, interface_widths, interface_widths_local)
     except UnboundLocalError:
-        return (height, -1)
+        return (height, -1, -1)
 
 
 def a_squared(dimension, height):

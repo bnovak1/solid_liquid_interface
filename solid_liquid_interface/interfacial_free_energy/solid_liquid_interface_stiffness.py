@@ -37,7 +37,7 @@ def analyze_frame(dimension, frame_num, traj_file, topfile, n_neighbors, latpara
         (X, Z) = grid
 
         # Calculate interface positions
-        (height, _) = sli.interface_positions_1D(frame_num, coords, box_sizes, snapshot,
+        (height, _, _) = sli.interface_positions_1D(frame_num, coords, box_sizes, snapshot,
                                                  n_neighbors, latparam, vectors_ref, tree_ref, X, Z,
                                                  smoothing_cutoff, interface_options,
                                                  outfile_prefix, crossover, reduce_flag=True)
@@ -57,7 +57,7 @@ def analyze_frame(dimension, frame_num, traj_file, topfile, n_neighbors, latpara
         (X, Y, Z) = grid
 
         # Calculate interface positions
-        (height, _) = sli.interface_positions_2D(frame_num, coords, box_sizes, snapshot,
+        (height, _, _) = sli.interface_positions_2D(frame_num, coords, box_sizes, snapshot,
                                                  n_neighbors, latparam, vectors_ref, tree_ref,
                                                  X, Y, Z, smoothing_cutoff, interface_options,
                                                  outfile_prefix, crossover, reduce_flag=True,
