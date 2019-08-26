@@ -537,14 +537,25 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
                 ind = np.where(psi[ix, iy, :] < crossover)[0]
 
             # Height for first crossing (lower interface)
+            # If problem with crossover, interfaces are too close. Set all heights to -1, break.
             ind_crossing = range(ind[0]-1, ind[0]+1)
-            fit = np.polyfit(psi[ix, iy, ind_crossing], psi_grid[ix, iy, ind_crossing, 2], 1)
-            height[ix, iy, 0] = fit[0]*crossover + fit[1]
+            try:
+                fit = np.polyfit(psi[ix, iy, ind_crossing], psi_grid[ix, iy, ind_crossing, 2], 1)
+                height[ix, iy, 0] = fit[0]*crossover + fit[1]
+            except IndexError:
+                height[:, :, :] = -1
+                break
 
             # Height for second crossing (upper interface)
             ind_crossing = range(ind[-1], ind[-1]+2)
-            fit = np.polyfit(psi[ix, iy, ind_crossing], psi_grid[ix, iy, ind_crossing, 2], 1)
-            height[ix, iy, 1] = fit[0]*crossover + fit[1]
+            try:
+                fit = np.polyfit(psi[ix, iy, ind_crossing], psi_grid[ix, iy, ind_crossing, 2], 1)
+                height[ix, iy, 1] = fit[0]*crossover + fit[1]
+            except IndexError:
+                height[:, :, :] = -1
+                break
+
+        if np.mean(height) == -1: break
 
     if frame_num == 0:
         interface_range_2D(height, smoothing_cutoff, latparam, outfile_prefix)

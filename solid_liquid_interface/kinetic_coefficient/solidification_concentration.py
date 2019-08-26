@@ -78,7 +78,7 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
     height_avg = np.mean(np.mean(height, axis=0), axis=0)
 
     # Find interface atoms
-    if interface_options['interface_flag']:
+    if interface_options['interface_flag'] and height_avg[0] != -1:
 
         x = np.hstack((np.unique(X), box_sizes[0][0]))
         y = np.hstack((np.unique(Y), box_sizes[0][1]))
@@ -100,7 +100,7 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
                                                    snapshot, interface_options)
 
     # Save pdb file
-    if interface_options['traj_flag']:
+    if interface_options['traj_flag'] and height_avg[0] != -1:
             sli.save_pdb(traj_file, coords, snapshot, interface_options, interfaces)
 
     # Interface concentrations
@@ -109,7 +109,15 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
         if frame == 0:
             sli.visualize_bins(box_sizes, latparam, interface_options, height, outfile_prefix)
 
-        concs = sli.interface_concentrations(snapshot, interfaces, interface_options)
+        if height_avg[0] != -1:
+            concs = sli.interface_concentrations(snapshot, interfaces, interface_options)
+        else:
+            n_layers = interface_options['n_layers']
+            nbins_per_layer = interface_options['nbins_per_layer']
+            nbins = (n_layers - 1)*nbins_per_layer + 1
+            atom_name_list = interface_options['atom_name_list']
+            n_names = len(atom_name_list)
+            concs = -np.ones((n_names-1)*nbins*2)
 
         if interface_options['free_boundaries']:
             return [height_avg, interface_widths, interface_widths_local, concs, system_depth]
@@ -199,13 +207,23 @@ def main(infile):
     n_layers = interface_options['n_layers']
 
     # Combine first and subsequent frame data
+    # remove data before point where height was first set to -1
     height = np.vstack((output1[0], np.array([output2[i][0] for i in range(nframes-1)])))
     interface_widths = np.vstack((output1[1], np.array([output2[i][1] for i in range(nframes-1)])))
     interface_widths_local = np.vstack((output1[2], np.array([output2[i][2] for i in range(nframes-1)])))
 
+    try:
+        ind_max = np.where(height[:, 0] == -1)[0][0]
+    except IndexError:
+        ind_max = nframes
+    height = height[:ind_max, :]
+    interface_widths = interface_widths[:ind_max, :]
+    interface_widths_local = interface_widths[:ind_max, :]
+
     if interface_options['conc_flag']:
 
         conc = np.vstack((output1[3], np.array([output2[i][3] for i in range(nframes-1)])))
+        conc = conc[:ind_max, :]
 
         # Save concentrations to file
         cols = ['frame']
@@ -225,7 +243,7 @@ def main(infile):
                     #'3rd is phase (E=phase at edge of box, C=phase in center of box), ' + \
                     'Last is the atom name.\n')
         outdata = pd.DataFrame(columns=cols)
-        outdata[cols[0]] = range(nframes)
+        outdata[cols[0]] = range(ind_max)
         outdata[cols[1:]] = conc
 
         outdata.to_csv(inputs['outfile_prefix'] + '_concs.dat', mode='a', index=False, sep=str(' '))
@@ -233,6 +251,7 @@ def main(infile):
         if interface_options['free_boundaries']:
             system_depth = np.hstack((output1[4],
                                       np.array([output2[i][4] for i in range(nframes-1)])))
+            system_depth = system_depth[:ind_max]
 
     else:
 
@@ -240,27 +259,28 @@ def main(infile):
 
             system_depth = np.vstack((output1[3],
                                       np.array([output2[i][3] for i in range(nframes-1)])))
+            system_depth = system_depth[:ind_max]
 
     del output1, output2
 
 
     # Save interface positions to file
-    outdata = np.column_stack((range(nframes), height))
+    outdata = np.column_stack((range(ind_max), height))
     np.savetxt(inputs['outfile_prefix'] + '_pos.dat', outdata,
                header='Frame | Interface postions (angstroms) for lower and upper interfaces')
 
     # Save interface widths to file
-    outdata = np.column_stack((range(nframes), interface_widths))
+    outdata = np.column_stack((range(ind_max), interface_widths))
     np.savetxt(inputs['outfile_prefix'] + '_interface_widths.dat', outdata,
                header='Frame | Interface widths (angstroms) for lower and upper interfaces')
 
-    outdata = np.column_stack((range(nframes), interface_widths_local))
+    outdata = np.column_stack((range(ind_max), interface_widths_local))
     np.savetxt(inputs['outfile_prefix'] + '_interface_widths_local.dat', outdata,
                header='Frame | Interface widths (angstroms) for lower and upper interfaces')
 
     # Save system depth to file
     if interface_options['free_boundaries']:
-        outdata = np.column_stack((range(nframes), system_depth))
+        outdata = np.column_stack((range(ind_max), system_depth))
         np.savetxt(inputs['outfile_prefix'] + '_sys_depth.dat', outdata,
                    header='Frame | System depth (angstroms)')
 
