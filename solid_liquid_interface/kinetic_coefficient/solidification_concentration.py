@@ -218,7 +218,7 @@ def main(infile):
         ind_max = nframes
     height = height[:ind_max, :]
     interface_widths = interface_widths[:ind_max, :]
-    interface_widths_local = interface_widths[:ind_max, :]
+    interface_widths_local = interface_widths_local[:ind_max, :]
 
     if interface_options['conc_flag']:
 

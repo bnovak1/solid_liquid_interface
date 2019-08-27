@@ -76,15 +76,15 @@ def visualize_bins(box_sizes, latparam, interface_options, height, outfile_prefi
     ax.plot_wireframe(X, Y, height[:, :, 0]+ (ilayer+1)*layer_width, linewidth=0.3, color='0.5')
 
     xticks = ax.get_xticks()
-    xtick_spacking = 2*(xticks[1] - xticks[0])
+    xtick_spacing = 2*(xticks[1] - xticks[0])
     yticks = ax.get_yticks()
-    ytick_spacking = 2*(yticks[1] - yticks[0])
+    ytick_spacing = 2*(yticks[1] - yticks[0])
     zticks = ax.get_zticks()
-    ztick_spacking = 2*(zticks[1] - zticks[0])
+    ztick_spacing = 2*(zticks[1] - zticks[0])
 
-    ml = MultipleLocator(xtick_spacking); ax.xaxis.set_major_locator(ml)
-    ml = MultipleLocator(ytick_spacking); ax.yaxis.set_major_locator(ml)
-    ml = MultipleLocator(ztick_spacking); ax.zaxis.set_major_locator(ml)
+    ml = MultipleLocator(xtick_spacing); ax.xaxis.set_major_locator(ml)
+    ml = MultipleLocator(ytick_spacing); ax.yaxis.set_major_locator(ml)
+    ml = MultipleLocator(ztick_spacing); ax.zaxis.set_major_locator(ml)
 
     ax.set_xlabel('x ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)#, fontsize=7)
     ax.set_ylabel('y ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)#, fontsize=7)
@@ -287,7 +287,87 @@ def find_interfacial_atoms_1D(x, height, coords, traj_file, snapshot, interface_
     return interfaces
 
 
-def erf_fit_func(order_param_sol, order_param_liq, pos_bound, pos,
+def erf_one_interface(order_param_sol, order_param_liq, pos, pos_interface, sigma, erf_sign):
+
+    order_param_fit = \
+        0.5*((order_param_sol + order_param_liq) + erf_sign*(order_param_sol - order_param_liq)* \
+             spec.erf((pos - pos_interface)/(sigma*np.sqrt(2.0))))
+
+    return order_param_fit
+
+
+def residual_erf_one_interface(params, pos, order_param, wghts, erf_sign):
+    """
+    Description
+    ----
+    Compute residuals for fit.
+
+    Inputs
+    ----
+    :params: Parameters for the model
+    :pos: Position in interface normal direction
+    :order_param: Order parameter to distinguish liquid from solid
+    :wghts: Weights
+    :erf_sign: 1 for solid in center of box and -1 for liquid in center of box
+
+    Outputs
+    ----
+    :residuals: Residuals
+    """
+
+    order_param_sol = params['order_param_sol'].value
+    order_param_liq = params['order_param_liq'].value
+    sigma = params['sigma'].value
+    pos_interface = params['pos_interface'].value
+
+    model = erf_one_interface(order_param_sol, order_param_liq, pos, pos_interface, sigma, erf_sign)
+
+    residuals = (order_param - model)*wghts
+
+    return residuals
+
+
+def fitting_erf_one_interface(pos, order_param, erf_sign, order_params_ini=[]):
+
+    wghts = np.ones(len(pos))  # All weights equal
+    params = lmfit.Parameters()
+
+    pos_min = np.min(pos)
+    delta_pos = np.max(pos) - pos_min
+
+    if len(order_params_ini) == 0:
+        order_param_sol_ini = np.max(order_param)
+        order_param_liq_ini = np.min(order_param)
+        params.add('order_param_sol', value=order_param_sol_ini, min=0.0)
+        params.add('order_param_liq', value=order_param_liq_ini, min=0.0)
+    else:
+        order_param_sol_ini = np.max(order_params_ini)
+        order_param_liq_ini = np.min(order_params_ini)
+        params.add('order_param_sol', value=order_param_sol_ini, vary=False)
+        params.add('order_param_liq', value=order_param_liq_ini, vary=False)
+
+    fliq = (np.mean(order_param) - order_param_sol_ini)/ \
+           (order_param_liq_ini - order_param_sol_ini)
+    fsol = 1 - fliq
+
+    pos_interface = delta_pos*((fliq/2)*(erf_sign==1) + (fsol/2)*(erf_sign==-1)) + pos_min
+    params.add('pos_interface', value=pos_interface)
+
+    params.add('sigma', value=5.0, min=0.0)
+
+    fit = lmfit.minimize(residual_erf_one_interface, params,
+                         args=(pos, order_param, wghts, erf_sign))
+
+    # order_param_sol = fit.params['order_param_sol'].value
+    # order_param_liq = fit.params['order_param_liq'].value
+    # crossover = (order_param_sol + order_param_liq)/2
+    multiplier = 2*np.sqrt(2)*spec.erfinv(0.99)
+    interface_width = multiplier*fit.params['sigma'].value
+
+    return interface_width
+
+
+def erf_two_interface(order_param_sol, order_param_liq, pos_bound, pos,
                  pos_interface_lower, pos_interface_upper,
                  sigma_lower, sigma_upper, erf_sign):
 
@@ -301,7 +381,7 @@ def erf_fit_func(order_param_sol, order_param_liq, pos_bound, pos,
     return order_param_fit
 
 
-def residual(params, pos, order_param, wghts, erf_sign):
+def residual_erf_two_interface(params, pos, order_param, wghts, erf_sign):
     """
     Description
     ----
@@ -328,16 +408,16 @@ def residual(params, pos, order_param, wghts, erf_sign):
     pos_interface_upper = params['pos_interface_upper'].value
     pos_bound = params['pos_bound'].value
 
-    model = erf_fit_func(order_param_sol, order_param_liq, pos_bound, pos,
-                         pos_interface_lower, pos_interface_upper,
-                         sigma_lower, sigma_upper, erf_sign)
+    model = erf_two_interface(order_param_sol, order_param_liq, pos_bound, pos,
+                              pos_interface_lower, pos_interface_upper,
+                              sigma_lower, sigma_upper, erf_sign)
 
     residuals = (order_param - model)*wghts
 
     return residuals
 
 
-def fitting_erf(pos, order_param, erf_sign, order_params_ini=[]):
+def fitting_erf_two_interface(pos, order_param, erf_sign, order_params_ini=[]):
 
     wghts = np.ones(len(pos))  # All weights equal
     params = lmfit.Parameters()
@@ -371,7 +451,8 @@ def fitting_erf(pos, order_param, erf_sign, order_params_ini=[]):
     params.add('sigma_upper', value=5.0, min=0.0)
     params.add('pos_bound', value=np.mean(pos))
 
-    fit = lmfit.minimize(residual, params, args=(pos, order_param, wghts, erf_sign))
+    fit = lmfit.minimize(residual_erf_two_interface, params,
+                         args=(pos, order_param, wghts, erf_sign))
 
     order_param_sol = fit.params['order_param_sol'].value
     order_param_liq = fit.params['order_param_liq'].value
@@ -379,22 +460,6 @@ def fitting_erf(pos, order_param, erf_sign, order_params_ini=[]):
     multiplier = 2*np.sqrt(2)*spec.erfinv(0.99)
     interface_widths = multiplier*np.array([fit.params['sigma_upper'].value,
                                             fit.params['sigma_lower'].value])
-
-    # if interface_widths.max() > 40:
-    #     import matplotlib.pyplot as plt
-    #     plt.plot(pos, order_param)
-    #     plt.plot(pos, erf_fit_func(fit.params['order_param_sol'].value,
-    #                                fit.params['order_param_liq'].value,
-    #                                fit.params['pos_bound'].value,
-    #                                pos,
-    #                                fit.params['pos_interface_lower'].value,
-    #                                fit.params['pos_interface_upper'].value,
-    #                                fit.params['sigma_lower'].value,
-    #                                fit.params['sigma_upper'].value,
-    #                                erf_sign))
-    #     plt.title(str(interface_widths))
-    #     plt.show()
-    #     import pdb; pdb.set_trace()
 
     return (crossover, interface_widths, [order_param_sol, order_param_liq])
 
@@ -506,16 +571,10 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         zpos = Z[0, 0, :]
         psi_mean = np.mean(np.mean(psi, axis=0), axis=0)
         erf_sign = 2*(psi_mean[int(len(psi_mean)/2)] > psi_mean[0]) - 1
-        (crossover, interface_widths, order_param_limits) = fitting_erf(zpos, psi_mean, erf_sign)
+        (crossover, interface_widths, order_param_limits) = \
+            fitting_erf_two_interface(zpos, psi_mean, erf_sign)
 
-        psi_flat = psi.reshape(-1, psi.shape[2])
-        nfits = psi_flat.shape[0]
-        interface_widths_local = np.array([fitting_erf(zpos, psi_flat[ifit, :], erf_sign,
-                                                       order_param_limits)[1] \
-                                           for ifit in range(nfits)])
-        interface_widths_local = np.mean(interface_widths_local, axis=0)
-
-        del zpos, psi_mean, erf_sign, psi_flat
+        del zpos, psi_mean
 
         if frame_num == 0:
             np.savetxt(outfile_prefix + '_crossover.txt', [crossover])
@@ -556,6 +615,41 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
                 break
 
         if np.mean(height) == -1: break
+
+    # Local interface widths by fitting to error functions
+    if (reduce_flag and frame_num == 0) or not reduce_flag:
+
+        interface_widths_local = np.zeros(2)
+
+        if np.mean(height) != -1:
+
+            mid = np.mean((height[:, 1] + height[:, 0])/2.0)
+
+            # Lower interface
+            ind = np.where(Z[0, 0, :] < mid)[0]
+            zpos = np.nan*np.ones(Z[:, :, ind].shape)
+            cnt = 0
+            for i in ind:
+                zpos[:, :, cnt] = Z[:, :, i] - height[:, :, 0]
+                cnt += 1
+            zpos = zpos.flatten()
+            psi_flat = psi[:, :, ind].flatten()
+            interface_widths_local[0] = fitting_erf_one_interface(zpos, psi_flat, erf_sign,
+                                                                  order_param_limits)
+            del zpos, psi_flat
+
+            # Upper interface
+            ind = np.where(Z[0, 0, :] > mid)[0]
+            zpos = np.nan*np.ones(Z[:, :, ind].shape)
+            cnt = 0
+            for i in ind:
+                zpos[:, :, cnt] = Z[:, :, i] - height[:, :, 1]
+                cnt += 1
+            zpos = -zpos.flatten()
+            psi_flat = psi[:, :, ind].flatten()
+            interface_widths_local[1] = fitting_erf_one_interface(zpos, psi_flat, erf_sign,
+                                                                  order_param_limits)
+            del zpos, psi_flat
 
     if frame_num == 0:
         interface_range_2D(height, smoothing_cutoff, latparam, outfile_prefix)
