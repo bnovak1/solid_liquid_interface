@@ -8,4 +8,4 @@ suffixes = [file.split('test_')[-1] for file in files]
 
 
 for suffix in suffixes:
-    subprocess.call('mv test_' + suffix + ' tests/results_TiNi/test_r_' + suffix, shell=True)
+    subprocess.call('mv test_' + suffix + ' tests/results_TiNi_2/test_' + suffix, shell=True)

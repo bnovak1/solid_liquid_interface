@@ -367,9 +367,10 @@ def fitting_erf_one_interface(pos, order_param, erf_sign, order_params_ini=[]):
     return interface_width
 
 
-def erf_two_interface(order_param_sol, order_param_liq, pos_bound, pos,
-                 pos_interface_lower, pos_interface_upper,
-                 sigma_lower, sigma_upper, erf_sign):
+def erf_two_interface(order_param_sol, order_param_liq, pos, pos_interface_lower,
+                      pos_interface_upper, sigma_lower, sigma_upper, erf_sign):
+
+    pos_bound = (pos_interface_lower + pos_interface_upper)/2.0
 
     order_param_fit = \
         0.5*((order_param_sol + order_param_liq) + \
@@ -406,11 +407,9 @@ def residual_erf_two_interface(params, pos, order_param, wghts, erf_sign):
     sigma_upper = params['sigma_upper'].value
     pos_interface_lower = params['pos_interface_lower'].value
     pos_interface_upper = params['pos_interface_upper'].value
-    pos_bound = params['pos_bound'].value
 
-    model = erf_two_interface(order_param_sol, order_param_liq, pos_bound, pos,
-                              pos_interface_lower, pos_interface_upper,
-                              sigma_lower, sigma_upper, erf_sign)
+    model = erf_two_interface(order_param_sol, order_param_liq, pos, pos_interface_lower,
+                              pos_interface_upper, sigma_lower, sigma_upper, erf_sign)
 
     residuals = (order_param - model)*wghts
 
@@ -449,7 +448,6 @@ def fitting_erf_two_interface(pos, order_param, erf_sign, order_params_ini=[]):
 
     params.add('sigma_lower', value=5.0, min=0.0)
     params.add('sigma_upper', value=5.0, min=0.0)
-    params.add('pos_bound', value=np.mean(pos))
 
     fit = lmfit.minimize(residual_erf_two_interface, params,
                          args=(pos, order_param, wghts, erf_sign))
@@ -460,6 +458,16 @@ def fitting_erf_two_interface(pos, order_param, erf_sign, order_params_ini=[]):
     multiplier = 2*np.sqrt(2)*spec.erfinv(0.99)
     interface_widths = multiplier*np.array([fit.params['sigma_upper'].value,
                                             fit.params['sigma_lower'].value])
+
+    # import matplotlib.pyplot as plt
+    # plt.plot(pos, order_param)
+    # plt.plot(pos, erf_two_interface(order_param_sol, order_param_liq, pos,
+    #                                 fit.params['pos_interface_lower'].value,
+    #                                 fit.params['pos_interface_upper'].value,
+    #                                 fit.params['sigma_lower'].value,
+    #                                 fit.params['sigma_upper'].value, erf_sign))
+    # plt.show()
+    # import pdb; pdb.set_trace()
 
     return (crossover, interface_widths, [order_param_sol, order_param_liq])
 
@@ -579,6 +587,7 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         if frame_num == 0:
             np.savetxt(outfile_prefix + '_crossover.txt', [crossover])
 
+
     # import matplotlib.pyplot as plt
     # plt.plot(Z[0, 0, :], np.mean(np.mean(psi, axis=0), axis=0), '.-')
     # plt.savefig(str(frame_num) + '.png')
@@ -634,7 +643,7 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
                 cnt += 1
             zpos = zpos.flatten()
             psi_flat = psi[:, :, ind].flatten()
-            interface_widths_local[0] = fitting_erf_one_interface(zpos, psi_flat, erf_sign,
+            interface_widths_local[1] = fitting_erf_one_interface(zpos, psi_flat, erf_sign,
                                                                   order_param_limits)
             del zpos, psi_flat
 
@@ -647,7 +656,7 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
                 cnt += 1
             zpos = -zpos.flatten()
             psi_flat = psi[:, :, ind].flatten()
-            interface_widths_local[1] = fitting_erf_one_interface(zpos, psi_flat, erf_sign,
+            interface_widths_local[0] = fitting_erf_one_interface(zpos, psi_flat, erf_sign,
                                                                   order_param_limits)
             del zpos, psi_flat
 
