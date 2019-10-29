@@ -1,0 +1,56 @@
+log             ../output/NPT_small/[TEMP]K/solid.log
+
+units           metal
+atom_style      atomic
+
+# lattice
+lattice         bcc [LATPARAM] origin 0.25 0.25 0.25
+region          box block 0 13 0 13 0 13
+create_box      1 box
+create_atoms    1 box
+
+# potential
+include         potential.in
+
+neigh_modify    delay 0 check yes
+
+# Time step
+timestep        [TIMESTEP]
+
+# Set velocities
+velocity        all create [TEMP] 5812775 dist gaussian
+
+# NPT equilibration for about 50 ps
+variable        nsteps equal round(50/dt)
+
+#fix             thermostat all temp/berendsen [TEMP] [TEMP] 0.1
+#fix             integrate all nve
+fix             npt all npt temp [TEMP] [TEMP] 0.1 iso 0.0 0.0 2.0
+
+run             ${nsteps}
+
+# NPT production for about 300 ps
+variable        nsteps equal round(300/dt)
+
+variable        hperatom equal "enthalpy/count(all)"
+
+compute         peperatom all pe/atom
+compute         ecoh all reduce ave c_peperatom
+
+variable        latparam equal "vol^(1.0/3.0)/13.0"
+variable        vperatom equal "vol/count(all)"
+
+compute         centro all centro/atom bcc
+compute         centroavg all reduce ave c_centro
+
+thermo          25
+thermo_style    custom time density v_latparam c_ecoh v_hperatom v_vperatom c_centroavg pe temp press
+
+restart         ${nsteps} ../output/NPT_small/[TEMP]K/solid.restart &
+                          ../output/NPT_small/[TEMP]K/solid.restart
+
+#variable        nstepstraj equal round(3/dt)
+#dump            solidify all atom ${nstepstraj} ../output/NPT_small/[TEMP]K/solid.lammpstrj
+#dump_modify     solidify image yes
+
+run             ${nsteps}

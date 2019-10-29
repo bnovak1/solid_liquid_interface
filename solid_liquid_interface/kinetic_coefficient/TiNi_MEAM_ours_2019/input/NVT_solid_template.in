@@ -1,0 +1,28 @@
+log             ../output/[ORIENTATION]/NVT_solid.log
+
+units           metal
+atom_style      atomic
+
+read_restart    [RESTART_FILE]
+
+change_box      all x final 0.0 [BOXX] &
+                    y final 0.0 [BOXY] &
+                    z final 0.0 [BOXZ] remap units box
+
+# potential
+include         potential.in
+
+neigh_modify    delay 0 check yes
+
+# Time step
+timestep        [TIMESTEP]
+
+# NVT equilibration for about 50 ps
+variable        nsteps equal round(50/dt)
+
+fix             nvt all nvt temp [TEMP] [TEMP] 0.1
+
+restart         ${nsteps} ../output/[ORIENTATION]/NVT_solid.restart &
+                          ../output/[ORIENTATION]/NVT_solid.restart
+
+run             ${nsteps}

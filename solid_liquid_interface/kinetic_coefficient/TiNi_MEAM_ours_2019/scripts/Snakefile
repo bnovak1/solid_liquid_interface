@@ -1,0 +1,28 @@
+gen_directory = '/home/bnovak1/Dropbox/Sync/CODE/Work/SIMULATIONS/general_simulation_scripts/LAMMPS/'
+ts_directory = '/home/bnovak1/Dropbox/Sync/CODE/Work/ANALYSIS/time_series_analysis/'
+
+
+rule data_from_log:
+    input:
+        gen_directory + 'data_from_log.lammps.bash'
+    output:
+        'data_from_log.lammps.bash'
+    shell:
+        'ln -s -n ' + gen_directory + '{output}'
+
+
+rule confidence_interval:
+    output:
+        'confidence_interval.py'
+    shell:
+        'ln -s -n ' + ts_directory + '{output}'
+
+
+rule results:
+    input:
+        rules.data_from_log.output,
+        rules.confidence_interval.output
+    output:
+        'workflow_complete'
+    shell:
+        'touch {output}'

@@ -1,0 +1,2 @@
+pair_style      meam/c
+pair_coeff      * * library.meam Ni Ti NiTi.meam Ti

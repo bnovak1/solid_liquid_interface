@@ -1,0 +1,13 @@
+units           metal
+atom_style      atomic
+
+lattice         bcc [LATPARAM] origin 0.25 0.25 0.25 &
+                               orient x 1 -1 0 orient y 0 0 -1 orient z 1 1 0
+region          box block 0 10 0 14 0 49
+create_box      1 box
+create_atoms    1 box
+
+variable        boxx equal lx
+variable        boxy equal ly
+print           "# Box sizes in x and y directions" file [BOX_FILE]
+print           "${boxx} ${boxy}" append [BOX_FILE]

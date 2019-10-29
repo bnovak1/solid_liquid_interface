@@ -1,0 +1,17 @@
+name: LAMMPS
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - defaults::python=2.7.13
+  - defaults::numpy=1.13.1
+  - defaults::scipy=0.19.1
+  - defaults::pandas=0.20.3
+  - defaults::ipython=5.4.1
+  - defaults::matplotlib=2.0.2
+  - conda-forge::lmfit=0.9.7
+  - defaults::joblib=0.11
+  - pip:
+      - arch==4.1
+      - argparse==1.4.0
+      - mpi4py==2.0.0

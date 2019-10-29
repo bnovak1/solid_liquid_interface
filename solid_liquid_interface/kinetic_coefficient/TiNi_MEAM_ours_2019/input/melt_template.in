@@ -1,0 +1,35 @@
+log             ../output/[ORIENTATION]/melt.log
+
+units           metal
+atom_style      atomic
+
+read_restart    [RESTART_FILE]
+
+# regions and groups
+group           solid union lower_solid lower_boundary upper_solid upper_boundary
+group           liquid subtract all solid
+
+# potential
+include         potential.in
+
+neigh_modify    delay 0 check yes
+
+# Time step
+timestep        [TIMESTEP]
+
+# Fix solid and melt liquid at constant volume for about 0.05 ns
+variable        nsteps equal round(50/dt)
+
+velocity        liquid create [TEMP] 1551055 dist gaussian
+
+compute         templiq liquid temp
+fix             nvt liquid nvt temp [TEMP] [TEMP] 0.1
+fix_modify      nvt temp templiq
+
+thermo          100
+thermo_style    custom time pe c_templiq
+
+restart         ${nsteps} ../output/[ORIENTATION]/melt.restart &
+                          ../output/[ORIENTATION]/melt.restart
+
+run             ${nsteps}

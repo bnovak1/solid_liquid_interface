@@ -1,0 +1,21 @@
+lattice         bcc 3.3385942593711 origin 0.25 0.25 0.25 &
+                               orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
+region          box block 0 14 0 14 0 69
+create_box      1 box
+create_atoms    1 box
+
+variable        boxcntr equal lz/2.0
+variable        solidbound1 equal 0.125*lz
+variable        solidbound2 equal 3.3385942593711/2.0
+variable        solidbound3 equal 0.875*lz
+variable        solidbound4 equal lz-3.3385942593711/2.0
+
+region          lower_solid block EDGE EDGE EDGE EDGE EDGE ${solidbound1} units box
+region          lower_boundary block EDGE EDGE EDGE EDGE EDGE ${solidbound2} units box
+region          upper_solid block EDGE EDGE EDGE EDGE ${solidbound3} EDGE units box
+region          upper_boundary block EDGE EDGE EDGE EDGE ${solidbound4} EDGE units box
+
+group           lower_solid region lower_solid
+group           lower_boundary region lower_boundary
+group           upper_solid region upper_solid
+group           upper_boundary region upper_boundary

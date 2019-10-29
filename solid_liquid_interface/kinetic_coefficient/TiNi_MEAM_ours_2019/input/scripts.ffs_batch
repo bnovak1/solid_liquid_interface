@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FreeFileSync XmlType="BATCH" XmlFormat="13">
+    <Compare>
+        <Variant>TimeAndSize</Variant>
+        <Symlinks>Follow</Symlinks>
+        <IgnoreTimeShift/>
+    </Compare>
+    <Synchronize>
+        <Variant>TwoWay</Variant>
+        <DetectMovedFiles>false</DetectMovedFiles>
+        <DeletionPolicy>Permanent</DeletionPolicy>
+        <VersioningFolder Style="Replace"/>
+    </Synchronize>
+    <Filter>
+        <Include>
+            <Item>*</Item>
+        </Include>
+        <Exclude>
+            <Item>/lmp_infiles/</Item>
+            <Item>/data_files/</Item>
+            <Item>/potential_files/</Item>
+            <Item>/MP_guess/</Item>
+            <Item>*/.snakemake/</Item>
+	    <Item>/sim_lists/</Item>
+            <Item>/__pycache__/</Item>
+        </Exclude>
+        <TimeSpan Type="None">0</TimeSpan>
+        <SizeMin Unit="None">0</SizeMin>
+        <SizeMax Unit="None">0</SizeMax>
+    </Filter>
+    <FolderPairs>
+        <Pair>
+            <Left Threads="20">/home/bnovak1/Sync_NAS/CIMM/solid_liquid_interface/kinetic_coefficient/TiNi/TiNi_MEAM_ours_2019/input/../scripts</Left>
+            <Right Threads="20">/home/bnovak1/CODE/Work/SIMULATIONS/CIMM/solid_liquid_interface/kinetic_coefficient/TiNi_MEAM_ours_2019/scripts</Right>
+        </Pair>
+    </FolderPairs>
+    <Errors Ignore="true" Retry="0" Delay="5"/>
+    <PostSyncCommand Condition="Completion"/>
+    <Batch>
+        <ProgressDialog Minimized="true" AutoClose="true"/>
+        <ErrorDialog>Show</ErrorDialog>
+        <PostSyncAction>None</PostSyncAction>
+        <LogfileFolder MaxCount="-1">/home/bnovak1/FFS/log</LogfileFolder>
+    </Batch>
+</FreeFileSync>

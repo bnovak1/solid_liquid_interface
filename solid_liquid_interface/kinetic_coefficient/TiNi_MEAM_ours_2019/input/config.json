@@ -1,0 +1,19 @@
+{
+    "DESCRIPTION": {
+        "alloy": "Ti",
+        "interatomic potential reference": "Kavousi, S.; Novak, B. R.; Baskes, M. I.; Zaeem, M. A.; Moldovan, D. MEAM potential for high temperature crystal-melt properties of Ti-Ni alloys and its application to phase field simulation of solidification. Modelling and Simulation in Materials Science and Engineering 2019, under review.",
+        "LAMMPS version": "12 Dec 2018",
+        "authors": "Brian Novak",
+        "date": "October 2019"
+    },
+    "RUN_LOCATION": "hera3",
+    "NTHREADS": 40,
+    "LATTICE_TYPE": "bcc",
+    "ORIENTATIONS": ["001", "110", "111"],
+    "ORIENTATION_LABELS": {
+        "001": "$\\mathrm{\\left<100\\right>\\left\\{001\\right\\}}$",
+        "110": "$\\mathrm{\\left<1\\bar{1}0\\right>\\left\\{110\\right\\}}$",
+        "111": "$\\mathrm{\\left<1\\bar{1}0\\right>\\left\\{111\\right\\}}$"
+    },
+    "CODE_DIRECTORY": "/home/bnovak1/CODE/Work/SIMULATIONS/CIMM/solid_liquid_interface/kinetic_coefficient/TiNi_MEAM_ours_2019"
+}

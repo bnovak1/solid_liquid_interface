@@ -1,0 +1,41 @@
+log             ../output/[ORIENTATION]/NPT_coexist_mp.log
+
+units           metal
+atom_style      atomic
+
+read_restart       [RESTART_FILE]
+
+# potential
+include         potential.in
+
+neigh_modify    delay 0 check yes
+
+# Time step
+timestep        [TIMESTEP]
+
+# NPT for about 100 ps
+variable        nsteps equal round(100/dt)
+
+velocity        liquid create [TEMP] 1551055 dist gaussian
+velocity        all zero linear
+
+fix             zeromom all momentum 25 linear 1 1 1 rescale
+fix             npt all npt temp [TEMP] [TEMP] 0.1 z 0.0 0.0 2.0
+
+thermo          100
+thermo_style    custom time pe lz press
+
+variable        nstepstraj equal round(1/dt)
+dump            coexist all atom ${nstepstraj} &
+                        ../output/[ORIENTATION]/NPT_coexist_mp.lammpstrj
+dump_modify     coexist image yes
+
+run             ${nsteps}
+
+# NPT to get restart files spaced about every 10 ps
+variable        restartsteps equal round(10/dt)
+variable        nsteps equal [NRUNS]*${restartsteps}
+
+restart         ${restartsteps} ../output/[ORIENTATION]/NPT_coexist_mp.restart
+
+run             ${nsteps}

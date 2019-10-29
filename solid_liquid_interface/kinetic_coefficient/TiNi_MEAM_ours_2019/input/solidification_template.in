@@ -1,0 +1,147 @@
+log             ../output/[ORIENTATION]/[TEMP]K/[RUN_NUM]/solidification.log
+
+units           metal
+atom_style      atomic
+atom_modify     map array
+
+read_restart       [RESTART_FILE]
+
+# groups
+group           boundary union lower_boundary upper_boundary
+group           nonboundary subtract all boundary
+
+# Scale box lengths in interface tangential directions
+# Create free boundaries in z direction
+variable        zupper1 equal lz+3.0
+variable        zupper2 equal lz+6.0
+change_box      all x final 0.0 [BOXX] &
+                    y final 0.0 [BOXY] &
+                    z final 3.0 ${zupper1} remap &
+                    z final 0.0 ${zupper2} &
+                    boundary p p f &
+                    units box
+
+# potential
+include         potential.in
+
+neigh_modify    delay 0 check yes
+
+# Time step
+timestep        [TIMESTEP]
+
+# Random seed
+variable        seed equal "2026561 + [RUN_NUM]"
+
+# Solidification
+variable        nsteps equal round(600/dt)
+
+velocity        all create [TEMP] ${seed} dist gaussian
+velocity        lower_boundary set 0.0 0.0 NULL
+velocity        upper_boundary set 0.0 0.0 NULL
+velocity        all zero linear
+
+#fix             bottomsprings lower_boundary spring/self 2.0 xy
+#compute         bottomtemp lower_boundary temp/com
+#compute_modify  bottomtemp extra/dof 2
+fix             favebottom lower_boundary aveforce 0.0 0.0 NULL
+compute         bottomtemp lower_boundary temp/partial 0 0 1
+fix             bottomthermostat lower_boundary langevin [TEMP] [TEMP] 0.1 ${seed} zero yes
+fix_modify      bottomthermostat temp bottomtemp
+
+#fix             topsprings upper_boundary spring/self 2.0 xy
+#compute         toptemp upper_boundary temp/com
+#compute_modify  toptemp extra/dof 2
+fix             favetop upper_boundary aveforce 0.0 0.0 NULL
+compute         toptemp upper_boundary temp/partial 0 0 1
+fix             topthermostat upper_boundary langevin [TEMP] [TEMP] 0.1 ${seed} zero yes
+fix_modify      topthermostat temp toptemp
+
+variable         binwidth equal lz/[N_TEMP_BINS]
+
+label           thermostatloop
+variable        ithermostat loop [N_TEMP_BINS]
+
+    variable         boundary1 equal (${ithermostat}-1)*${binwidth}
+    variable         boundary2 equal ${ithermostat}*${binwidth}
+
+    region          region${ithermostat} block EDGE EDGE EDGE EDGE &
+                                               ${boundary1} ${boundary2} units box
+
+    compute         temp${ithermostat} nonboundary temp/region region${ithermostat}
+
+    #fix             thermostat${ithermostat} nonboundary temp/berendsen [TEMP] [TEMP] 0.1
+    fix             thermostat${ithermostat} nonboundary temp/rescale 1 [TEMP] [TEMP] 1.0 1.0
+    fix_modify      thermostat${ithermostat} temp temp${ithermostat}
+
+next            ithermostat
+jump            SELF thermostatloop
+
+fix             zeromom1 lower_boundary momentum 1 linear 1 1 0 rescale
+fix             zeromom2 upper_boundary momentum 1 linear 1 1 0 rescale
+fix             zeromom3 all momentum 1 linear 1 1 1 rescale
+fix             integrate all nve
+
+
+# Compute interface positions using python
+compute         centro all centro/atom fcc
+variable        centro atom c_centro
+compute         centroavg all reduce ave c_centro
+variable        pos atom z
+variable        posbottom equal xcm(lower_boundary,z)
+variable        postop equal xcm(upper_boundary,z)
+variable        depth equal "v_postop - v_posbottom"
+variable        time equal time
+variable        interfacefitfile string &
+                            "../output/[ORIENTATION]/[TEMP]K/[RUN_NUM]/interface_fit.dat"
+
+variable        interfacedist python getdatafit
+python          getdatafit input 3 SELF v_time v_interfacefitfile &
+                           return v_interfacedist &
+                           format pfsf &
+                           file ../scripts/fit_centrosymmetry_param.py
+
+# Thermo output
+compute         tempnb nonboundary temp
+
+thermo          25
+thermo_style    custom time pe v_depth temp c_bottomtemp c_tempnb c_toptemp c_centroavg
+
+variable        nstepstraj equal round(2.0/dt)
+dump            solidify all custom ${nstepstraj} &
+                     ../output/[ORIENTATION]/[TEMP]K/[RUN_NUM]/solidification.lammpstrj &
+                     id type x y z ix iy iz c_centro
+#fix             interfacedist all print ${nstepstraj} "${interfacedist}"
+
+#dump            solidify all atom ${nstepstraj} &
+#                         ../output/[ORIENTATION]/[TEMP]K/[RUN_NUM]/solidification.lammpstrj
+#dump_modify     solidify image yes
+
+restart         ${nstepstraj} &
+                ../output/[ORIENTATION]/[TEMP]K/[RUN_NUM]/solidification.restart &
+                ../output/[ORIENTATION]/[TEMP]K/[RUN_NUM]/solidification.restart
+
+run             250
+
+label           timeloop
+variable        seg loop 10000
+    run             250
+    if              "${interfacedist} < 50.0" then "jump SELF break"
+next            seg
+jump            SELF timeloop
+
+label           break
+
+variable        area equal lx*ly
+print           "${area}" file ../output/[ORIENTATION]/[TEMP]K/[RUN_NUM]/area.dat
+
+#compute         tempslabs all temp/profile 1 1 1 z [N_TEMP_BINS] out bin
+#compute_modify  tempslabs dynamic/dof yes
+
+#fix             nvt all nvt temp [TEMP] [TEMP] 0.1
+#fix_modify      nvt temp tempslabs
+
+#thermo_style    custom time pe temp c_tempslabs c_tempslabs[1][2] c_tempslabs[2][2] &
+#                                                c_tempslabs[3][2] c_tempslabs[4][2] &
+#                                                c_tempslabs[5][2] c_tempslabs[6][2] &
+#                                                c_tempslabs[7][2] c_tempslabs[8][2] &
+#                                                c_tempslabs[9][2] c_tempslabs[10][2]

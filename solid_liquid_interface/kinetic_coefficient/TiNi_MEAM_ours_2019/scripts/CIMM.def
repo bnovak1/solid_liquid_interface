@@ -1,0 +1,149 @@
+BootStrap: docker
+From: ubuntu:18.04
+
+%labels
+brian.novak.simulation@gmail.com 20191017
+
+%environment
+export LC_ALL=C
+
+export PATH="$PATH:/usr/local/ovito/bin"
+
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lammps/src/
+export PYTHON_PATH=$PYTHON_PATH:/usr/local/lammps/python/
+
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/usr/local/miniconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/usr/local/miniconda3/etc/profile.d/conda.sh" ]; then
+        . "/usr/local/miniconda3/etc/profile.d/conda.sh"
+    else
+        export PATH="/usr/local/miniconda3/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+
+%files
+# Login for download required. Download these manually before build.
+vmd-1.9.3.bin.LINUXAMD64-CUDA8-OptiX4-OSPRay111p1.opengl.tar.gz
+ovito-2.9.0-x86_64.tar.gz
+
+%post
+
+# Ubuntu packages
+apt-get update
+apt-get install -y software-properties-common wget ssh gcc g++ git cmake libopenmpi-dev \
+                   bc libqt5x11extras5 xorg freeglut3-dev mesa-utils tcsh gnuplot \
+                   imagemagick nano
+
+# Atom editor
+wget -q https://packagecloud.io/AtomEditor/atom/gpgkey -O- | apt-key add -
+add-apt-repository "deb [arch=amd64] https://packagecloud.io/AtomEditor/atom/any/ any main"
+apt-get update
+apt-get install -y atom
+
+# Python 3 packages with conda
+wget https://repo.anaconda.com/miniconda/Miniconda3-4.5.12-Linux-x86_64.sh
+bash Miniconda3-4.5.12-Linux-x86_64.sh -b -p /usr/local/miniconda3
+rm Miniconda3-4.5.12-Linux-x86_64.sh
+
+export PATH="/usr/local/miniconda3/bin:$PATH"
+
+conda update conda
+conda update pip
+
+conda config --append channels conda-forge
+conda config --append channels bioconda
+
+conda install -y snakemake=5.5.4
+conda install -y cython=0.29.12
+conda install -y ipython=7.7.0
+conda install -y joblib=0.13.2
+conda install -y lmfit=0.9.13
+conda install -y matplotlib=3.1.0
+conda install -y mdanalysis=0.19.2
+conda install -y mdtraj=1.9.3
+conda install -y -c pycalphad -c msys2 -c conda-forge pycalphad
+conda install -y pylint=2.3.1
+conda install -y sympy=1.4
+pip install arch ase atsim.potentials
+conda install -y scipy=1.2.0
+conda install -y pmda=0.2.1
+
+conda clean -t -y
+rm -r /usr/local/miniconda3/lib/python3.7/__pycache__
+
+# Python 2 Ubuntu packages for LAMMPS
+apt install -y python-numpy python-scipy python-lmfit python-mpi4py
+
+# LAMMPS from repository
+add-apt-repository -y ppa:gladky-anton/lammps
+apt-get install -y lammps-stable
+
+# LAMMPS with VC-SGC and python
+wget https://github.com/lammps/lammps/archive/stable_12Dec2018.tar.gz
+tar -zxf stable_12Dec2018.tar.gz
+
+cd lammps-stable_12Dec2018/src
+wget https://vcsgc-lammps.materialsmodeling.org/vcsgc-lammps.tgz --no-check-certificate
+tar xfz vcsgc-lammps.tgz
+rm vcsgc-lammps.tgz
+
+cd ../cmake
+line=`cat CMakeLists.txt | awk '$1 == "set(ACCEL_PACKAGES" {print NR-1}'`
+sed -E -i "${line}s|(.*)\)|\1 USER-VCSGC)|" CMakeLists.txt
+
+cd ..
+mkdir build
+cd build
+cmake -D CMAKE_INSTALL_PREFIX=/usr/local \
+      -D LAMMPS_MACHINE=vcsgc \
+      -D BUILD_MPI=on \
+      -D PKG_MANYBODY=on \
+      -D PKG_MC=on \
+      -D PKG_MISC=on \
+      -D PKG_OPT=on \
+      -D PKG_PYTHON=on \
+      -D PYTHON_EXECUTABLE=/usr/bin/python \
+      -D BUILD_LIB=on \
+      -D BUILD_SHARED_LIBS=on \
+      -D PKG_REPLICA=on \
+      -D PKG_RIGID=on \
+      -D PKG_USER-MEAMC=on \
+      -D PKG_USER-MISC=on \
+      -D PKG_USER-OMP=on \
+      -D PKG_USER-PTM=on \
+      -D PKG_USER-VCSGC=on \
+      ../cmake
+
+make -j 10
+
+make install
+
+cd ..
+rm -r build
+cd ..
+mv -r lammps-stable_12Dec2018/ /usr/local/lammps
+rm stable_12Dec2018.tar.gz
+
+# VMD
+tar xf vmd-1.9.3.bin.LINUXAMD64-CUDA8-OptiX4-OSPRay111p1.opengl.tar.gz
+cd vmd-1.9.3
+./configure
+cd src
+make install
+cd ../..
+rm -r vmd-1.9.3*
+cd /lib/x86_64-linux-gnu
+ln -s -n libexpat.so.1 libexpat.so.0
+cd -
+
+# Ovito
+tar zxf ovito-2.9.0-x86_64.tar.gz
+mv ovito-2.9.0-x86_64 /usr/local/ovito
+rm ovito-2.9.0-x86_64.tar.gz
