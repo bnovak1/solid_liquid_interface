@@ -326,6 +326,33 @@ def residual_erf_one_interface(params, pos, order_param, wghts, erf_sign):
 
     return residuals
 
+def plot_interface_width(pos, order_param, fit, erf_sign, interface_width):
+    '''
+    Function to make a plot of interface width. Not used normally.
+    '''
+
+    import matplotlib.pyplot as plt
+    import my_plot_settings_article as mpsa
+    plt.plot(-pos, order_param, '.', label='Data', markersize=1, alpha=1, mec='none')
+    plt.plot(-np.sort(pos), erf_one_interface(fit.params['order_param_sol'].value,
+                                             fit.params['order_param_liq'].value,
+                                             np.sort(pos),
+                                             fit.params['pos_interface'].value,
+                                             fit.params['sigma'].value,
+                                             erf_sign), label='Fit')
+    dy = 0.05*np.diff(plt.ylim())
+    ydata = [plt.ylim()[0] + dy, plt.ylim()[1] - dy]
+    plt.plot([interface_width/2, interface_width/2], ydata, 'k--')
+    plt.plot([-interface_width/2, -interface_width/2], ydata, 'k--')
+    mpsa.axis_setup('x')
+    mpsa.axis_setup('y')
+    plt.xlabel('$\\mathrm{Z - Z_{interface} \\left( \\AA \\right)}$',
+               labelpad=mpsa.axeslabelpad)
+    plt.ylabel('$\\mathrm{\\psi}$', labelpad=mpsa.axeslabelpad)
+    plt.legend()
+    mpsa.save_figure('garbage.png', res=300)
+    plt.close()
+
 
 def fitting_erf_one_interface(pos, order_param, erf_sign, order_params_ini=[]):
 
@@ -363,6 +390,9 @@ def fitting_erf_one_interface(pos, order_param, erf_sign, order_params_ini=[]):
     # crossover = (order_param_sol + order_param_liq)/2
     multiplier = 2*np.sqrt(2)*spec.erfinv(0.99)
     interface_width = multiplier*fit.params['sigma'].value
+
+    # plot_interface_width(pos, order_param, fit, erf_sign, interface_width)
+    # import pdb; pdb.set_trace()
 
     return interface_width
 
@@ -776,17 +806,17 @@ def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         outdata = np.column_stack((psi_grid[nz_grid:2*nz_grid, 1], psi[1, :]))
         np.savetxt(outfile_prefix + '_psi.dat', outdata)
 
-
     # Crossover value for psi by fitting to error functions
     if (reduce_flag and frame_num == 0) or not reduce_flag:
         zpos = Z[0, :]
         psi_mean = np.mean(psi, axis=0)
         erf_sign = 2*(psi_mean[int(len(psi_mean)/2)] > psi_mean[0]) - 1
-        (crossover, interface_widths, order_param_limits) = fitting_erf(zpos, psi_mean, erf_sign)
+        (crossover, interface_widths, order_param_limits) = \
+            fitting_erf_two_interface(zpos, psi_mean, erf_sign)
 
         nfits = psi.shape[0]
-        interface_widths_local = np.array([fitting_erf(zpos, psi[ifit, :], erf_sign,
-                                                       order_param_limits)[1] \
+        interface_widths_local = np.array([fitting_erf_two_interface(zpos, psi[ifit, :], erf_sign,
+                                                                     order_param_limits)[1] \
                                            for ifit in range(nfits)])
         interface_widths_local = np.mean(interface_widths_local, axis=0)
 
