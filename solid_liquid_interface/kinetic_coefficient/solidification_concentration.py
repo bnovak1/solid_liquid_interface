@@ -1,16 +1,3 @@
-# added by pasteurize
-########################################################################################
-from __future__ import division
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import open
-from builtins import int
-from builtins import range
-from future import standard_library
-standard_library.install_aliases()
-#########################################################################################
-
 from joblib import Parallel, delayed, cpu_count
 import mdtraj
 import numpy as np
@@ -89,15 +76,8 @@ def analyze_frame(nframes, frame, traj_file, topfile, n_neighbors, latparam, vec
             h = np.row_stack((h, h[0, :]))
             height_ext[:, :, iint] = h
 
-        if interface_options['algorithm'] == 'nearest':
-
-            interfaces = \
-                sli.find_interfacial_atoms_2D_nearest(x, y, height_ext, coords, traj_file,
-                                                      snapshot, interface_options, latparam)
-        elif interface_options['algorithm'] == 'ITIM':
-            interfaces = \
-                sli.find_interfacial_atoms_2D_itim(x, y, height_ext, coords, traj_file,
-                                                   snapshot, interface_options)
+        interfaces = sli.find_interfacial_atoms_2D(x, y, height_ext, coords, traj_file, snapshot,
+                                                   interface_options, latparam)
 
     # Save pdb file
     if interface_options['traj_flag'] and height_avg[0] != -1:
@@ -142,11 +122,6 @@ def main(infile):
 
     interface_options['interface_flag'] = \
         interface_options['traj_flag'] or interface_options['conc_flag']
-
-    if interface_options['interface_flag']:
-        assert interface_options['algorithm'] == 'ITIM' or \
-               interface_options['algorithm'] == 'nearest', \
-               'Algorithm for finding interfacial atoms must be "ITIM" or "nearest".'
 
     # Make directories for interface trajectories
     if interface_options['traj_flag']:

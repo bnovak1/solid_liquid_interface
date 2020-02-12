@@ -13,18 +13,13 @@
         "traj_flag": false,
         "conc_flag": true,
         "free_boundaries": true,
-        "algorithm": "nearest",
         "r_atoms": {
             "Ti": 1.4325,
             "Ni": 1.1925
         },
         "n_layers": 7,
         "nbins_per_layer": 6,
-        "layer_width": 1.4325,
-        "ITIM": {
-            "r_probe": 1.1925,
-            "grid_spacing": 0.12
-        }
+        "layer_width": 1.4325
     },
     "nthreads": 4
 }

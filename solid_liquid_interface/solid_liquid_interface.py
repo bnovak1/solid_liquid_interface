@@ -1,29 +1,36 @@
-# added by pasteurize
-#########################################################################################
-from __future__ import division
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import open
-from builtins import int
-from builtins import range
-from future import standard_library
-standard_library.install_aliases()
-#########################################################################################
+"""
+Compute phi and psi order parameters based on local structure relative to a reference crystal
+structure. Find interfacial atoms. Compute concentration profiles across the interface.
+Compute interface widths. 2D and quasi-1D inteface geometries. Currently works only with cubic
+crystal structures.
+"""
 
 import lmfit
 import mdtraj
 import numpy as np
-import pandas as pd
-import scipy.constants as constants
-# import scipy.fftpack as fft
 import scipy.interpolate as interp
 import scipy.spatial as ss
 import scipy.special as spec
-import subprocess
 
 
 def get_ref_vectors(n_neighbors, reference_structure, topfile):
+    """
+    Description
+    ----
+    Compute the vectors from a single atom to its n_neighbors nearest neighbors in the reference
+    structure. Construct a k-d tree for those vectors.
+
+    Inputs
+    ----
+    :n_neighbors: Number of nearest neighbors to consider.
+    :reference_structure: Name of file with reference structure.
+    :top_file: Name of file with topology information such as a pdb file.
+
+    Outputs
+    ----
+    :vectors_ref: Vectors from a single atom to its nearest neighbors in the reference structure.
+    :tree_ref: k-d tree of vectors_ref.
+    """
 
     # Read in reference structure
     reference_structure = mdtraj.load_lammpstrj(reference_structure, top=topfile)
@@ -51,6 +58,22 @@ def get_ref_vectors(n_neighbors, reference_structure, topfile):
 
 
 def visualize_bins(box_sizes, latparam, interface_options, height, outfile_prefix):
+    """
+    Description
+    ----
+    Create 3D visualization of surfaces defining bin edges used for concentration profiles.
+    Alternate colors for overlapping bins. For example, if there are 3 bins which are overlapping,
+    then the colors would be blue, green, red, blue, green, red, ...
+
+    Inputs
+    ----
+    :box_sizes: Simulation box sizes.
+    :latparam: Crystal lattice parameter.
+    :interface_options: Options dictionary related to the interface read from the input file.
+                        Here the layer_width, n_bins_per_layer, and n_layers keys are used.
+    :height: 3D array defining the z positions as a function of x and y for the 2 interfaces.
+    :outfile_prefix: Prefix for file name of output png file.
+    """
 
     from mpl_toolkits import mplot3d
     import matplotlib as mpl
@@ -82,9 +105,14 @@ def visualize_bins(box_sizes, latparam, interface_options, height, outfile_prefi
     zticks = ax.get_zticks()
     ztick_spacing = 2*(zticks[1] - zticks[0])
 
-    ml = MultipleLocator(xtick_spacing); ax.xaxis.set_major_locator(ml)
-    ml = MultipleLocator(ytick_spacing); ax.yaxis.set_major_locator(ml)
-    ml = MultipleLocator(ztick_spacing); ax.zaxis.set_major_locator(ml)
+    ml = MultipleLocator(xtick_spacing)
+    ax.xaxis.set_major_locator(ml)
+
+    ml = MultipleLocator(ytick_spacing)
+    ax.yaxis.set_major_locator(ml)
+
+    ml = MultipleLocator(ztick_spacing)
+    ax.zaxis.set_major_locator(ml)
 
     ax.set_xlabel('x ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)#, fontsize=7)
     ax.set_ylabel('y ($\\mathrm{\\AA}$)', labelpad=mpsa.axeslabelpad)#, fontsize=7)
@@ -96,34 +124,63 @@ def visualize_bins(box_sizes, latparam, interface_options, height, outfile_prefi
 
 
 def save_pdb(traj_file, coords, snapshot, interface_options, interfaces):
+    """
+    Description
+    ----
+    Save a pdb file with atoms near interfaces colored based on the bin they are in.
+    Only makes sense with non-overlapping bins.
 
-        natoms = coords.shape[0]
-        nbins = interfaces[0].shape[0]
-        bfactors = np.zeros(natoms)
+    Inputs
+    ----
+    :traj_file: Name of trajector file. Used to determine the name of the output file.
+    :coords: Atom coordinates array.
+    :interface_options: Options dictionary related to the interface read from the input file.
+                        Here the traj_dir key is used.
+    :interfaces: Indices of atoms in the bins defined around each interface.
+    """
 
-        for iint in range(2):
+    natoms = coords.shape[0]
+    nbins = interfaces[0].shape[0]
+    bfactors = np.zeros(natoms)
 
-            beta = 0.0
+    for iint in range(2):
 
-            for ibin in range(nbins):
+        beta = 0.0
 
-                beta += 1.0
+        for ibin in range(nbins):
 
-                ind = interfaces[iint, ibin]
-                bfactors[ind] = beta
+            beta += 1.0
+
+            ind = interfaces[iint, ibin]
+            bfactors[ind] = beta
 
 
-        traj_prefix = '.'.join(traj_file.split('.')[:-1])
-        traj_prefix = traj_prefix.split('/')[-1]
+    traj_prefix = '.'.join(traj_file.split('.')[:-1])
+    traj_prefix = traj_prefix.split('/')[-1]
 
-        pdb = mdtraj.formats.PDBTrajectoryFile( \
-            interface_options['traj_dir'] + traj_prefix + '.pdb', mode='w')
-        pdb.write(coords, snapshot.top, unitcell_lengths=tuple(10.0*snapshot.unitcell_lengths[0]),
-                  unitcell_angles=tuple(snapshot.unitcell_angles[0]), bfactors=bfactors)
-        pdb.close()
+    pdb = mdtraj.formats.PDBTrajectoryFile( \
+        interface_options['traj_dir'] + traj_prefix + '.pdb', mode='w')
+    pdb.write(coords, snapshot.top, unitcell_lengths=tuple(10.0*snapshot.unitcell_lengths[0]),
+              unitcell_angles=tuple(snapshot.unitcell_angles[0]), bfactors=bfactors)
+    pdb.close()
 
 
 def interface_concentrations(snapshot, interfaces, interface_options):
+    """
+    Description
+    ----
+    Concentrations in each bin near the interfaces.
+
+    Inputs
+    ----
+    :interfaces: Indices of atoms in the bins defined around each interface.
+    :interface_options: Options dictionary related to the interface read from the input file.
+                        Here the atom_names and atom_name_list keys are used.
+
+    Outputs
+    ----
+    :concs: Concentrations.
+    """
 
     nbins = interfaces.shape[1]
     atom_names = interface_options['atom_names']
@@ -147,62 +204,26 @@ def interface_concentrations(snapshot, interfaces, interface_options):
     return concs
 
 
-def itim(snapshot, coords, phase_atoms, interface_options):
-    '''
-    FIX: STILL USES PHASES
-    '''
+def find_interfacial_atoms_2D(x, y, height, coords, traj_file, snapshot, interface_options,
+                              latparam):
+    """
+    Description
+    ----
+    Find the atoms in the bins near the interfaces for a 2D interface.
 
-    import pytim
+    Inputs
+    ----
+    :x: Positions of grid points in interface plane.
+    :y: Positions of grid points in interface plane.
+    :height: Interface locations in the interface normal direction.
+    :coords: Atom coordinates array.
+    :interface_options: Options dictionary related to the interface read from the input file.
+                        Here the n_layers, n_bins_per_layer, and layer_width keys are used.
 
-    r_atoms = interface_options['r_atoms']
-    r_probe = interface_options['ITIM']['r_probe']
-    grid_spacing = interface_options['ITIM']['grid_spacing']
-    n_layers = interface_options['n_layers']
-
-    interfaces = np.empty(2, dtype=object)
-
-    # Remove extra space from box so pytim can find the correct interfaces
-    if interface_options['free_boundaries']:
-        shift = np.min(snapshot.xyz[0][:, 2])
-        snapshot.xyz[0][:, 2] -= shift
-        box_shift = snapshot.unitcell_lengths[0][2] - np.max(snapshot.xyz[0][:, 2])
-        snapshot.unitcell_lengths[0][2] -= box_shift
-
-    # Find interfacial atoms
-    for iphase in range(2):
-        interfaces[iphase] = pytim.ITIM(snapshot, group=phase_atoms[iphase], normal='z',
-                                        molecular=False, alpha=r_probe,
-                                        radii_dict=r_atoms, mesh=grid_spacing,
-                                        max_layers=n_layers)
-
-    # Change box back
-    if interface_options['free_boundaries']:
-        snapshot.unitcell_lengths[0][2] += box_shift
-        snapshot.xyz[0][:, 2] += shift
-
-    # Get lists instead of MDAnalysis objects
-    interface_atoms = np.empty((2, 2, n_layers), dtype=object)
-
-    cnt = 0
-    for ilayer in range(n_layers):
-        for iphase in range(2):
-
-            if iphase==0:
-    	        interface_atoms[0, iphase, ilayer] = \
-                    interfaces[iphase].layers[0, ilayer].indices
-    	        interface_atoms[1, iphase, ilayer] = \
-                    interfaces[iphase].layers[1, ilayer].indices
-            else:
-    	        interface_atoms[0, iphase, ilayer] = \
-                    interfaces[iphase].layers[1, ilayer].indices
-    	        interface_atoms[1, iphase, ilayer] = \
-                    interfaces[iphase].layers[0, ilayer].indices
-
-    return interface_atoms
-
-
-def find_interfacial_atoms_2D_nearest(x, y, height, coords, traj_file, snapshot,
-                                      interface_options, latparam):
+    Outputs
+    ----
+    :interfaces: Indices of atoms in the bins defined around each interface.
+    """
 
     n_layers = interface_options['n_layers']
     nbins_per_layer = interface_options['nbins_per_layer']
@@ -228,8 +249,10 @@ def find_interfacial_atoms_2D_nearest(x, y, height, coords, traj_file, snapshot,
             lower_shift = -bin_width*(n_layers/2.0 - ibin/nbins_per_layer)
             upper_shift = lower_shift + bin_width
 
-            ind = np.intersect1d(np.where(coords[atoms, 2] >= interface_projections + lower_shift)[0],
-                                 np.where(coords[atoms, 2] < interface_projections + upper_shift)[0])
+            ind = np.intersect1d(np.where(coords[atoms, 2] >= interface_projections + \
+                                          lower_shift)[0],
+                                 np.where(coords[atoms, 2] < interface_projections + \
+                                          upper_shift)[0])
 
             interfaces[iint, ibin] = atoms[ind]
 
@@ -238,56 +261,52 @@ def find_interfacial_atoms_2D_nearest(x, y, height, coords, traj_file, snapshot,
     return interfaces
 
 
-def find_interfacial_atoms_2D_itim(x, y, height, coords, traj_file, snapshot,
-                                   interface_options):
-
-    # Split phases
-    phase_atoms = np.empty(2, dtype=object)
-
-    z_interp = interp.RectBivariateSpline(x, y, height[:, :, 0])
-    interface_positions = z_interp.ev(coords[:, 0], coords[:, 1])
-    phase_atoms[0] = np.where(coords[:, 2] < interface_positions)[0]
-
-    z_interp = interp.RectBivariateSpline(x, y, height[:, :, 1])
-    interface_positions = z_interp.ev(coords[:, 0], coords[:, 1])
-    phase_atoms[0] = np.hstack((phase_atoms[0],
-                                np.where(coords[:, 2] > interface_positions)[0]))
-
-    phase_atoms[1] = np.setxor1d(phase_atoms[0], range(coords.shape[0]))
-
-
-    # Interfacial atoms
-    interfaces = itim(snapshot, coords, phase_atoms, interface_options)
-
-    return interfaces
-
-
-def find_interfacial_atoms_1D(x, height, coords, traj_file, snapshot, interface_options):
-    '''
-    FIX: STILL USES PHASES
-    '''
-
-    # Split phases
-    phase_atoms = np.empty(2, dtype=object)
-
-    z_interp_lower = interp.UnivariateSpline(x, height[:, 0], s=0)
-    interface_positions = z_interp_lower(coords[:, 0])
-    phase_atoms[0] = np.where(coords[:, 2] < interface_positions)[0]
-
-    z_interp_upper = interp.UnivariateSpline(x, height[:, 1], s=0)
-    interface_positions = z_interp_upper(coords[:, 0])
-    phase_atoms[0] = np.hstack((phase_atoms[0],
-                                np.where(coords[:, 2] > interface_positions)[0]))
-
-    phase_atoms[1] = np.setxor1d(phase_atoms[0], range(coords.shape[0]))
-
-    # Interfacial atoms
-    interfaces = itim(snapshot, coords, phase_atoms, interface_options)
-
-    return interfaces
+# def find_interfacial_atoms_1D(x, height, coords, traj_file, snapshot, interface_options):
+#     '''
+#     FIX: STILL USES PHASES
+#     '''
+#
+#     # Split phases
+#     phase_atoms = np.empty(2, dtype=object)
+#
+#     z_interp_lower = interp.UnivariateSpline(x, height[:, 0], s=0)
+#     interface_positions = z_interp_lower(coords[:, 0])
+#     phase_atoms[0] = np.where(coords[:, 2] < interface_positions)[0]
+#
+#     z_interp_upper = interp.UnivariateSpline(x, height[:, 1], s=0)
+#     interface_positions = z_interp_upper(coords[:, 0])
+#     phase_atoms[0] = np.hstack((phase_atoms[0],
+#                                 np.where(coords[:, 2] > interface_positions)[0]))
+#
+#     phase_atoms[1] = np.setxor1d(phase_atoms[0], range(coords.shape[0]))
+#
+#     # Interfacial atoms
+#     interfaces = itim(snapshot, coords, phase_atoms, interface_options)
+#
+#     return interfaces
 
 
 def erf_one_interface(order_param_sol, order_param_liq, pos, pos_interface, sigma, erf_sign):
+    """
+    Description
+    ----
+    Evaluate an error function for the order parameter as a function of interface normal position
+    (pos) for a single interface.
+
+    Inputs
+    ----
+    :order_param_sol: Parameter for average order parameter in solid phase.
+    :order_param_sol: Parameter for average order parameter in liquid phase.
+    :pos: Array of position in the interface normal direction.
+    :pos_interface: Parameter for average interface position in the interface normal direction.
+    :sigma: Width parameter.
+    :erf_sign: Can be set to 1 or -1 depending on the relative locations of the solid and liquid
+               in the simulation box.
+
+    Outputs
+    ----
+    :order_param_fit: Array of values of the fitted function corresponding to pos.
+    """
 
     order_param_fit = \
         0.5*((order_param_sol + order_param_liq) + erf_sign*(order_param_sol - order_param_liq)* \
@@ -326,35 +345,64 @@ def residual_erf_one_interface(params, pos, order_param, wghts, erf_sign):
 
     return residuals
 
+
 def plot_interface_width(pos, order_param, fit, erf_sign, interface_width):
-    '''
+    """
     Function to make a plot of interface width. Not used normally.
-    '''
+    """
 
     import matplotlib.pyplot as plt
     import my_plot_settings_article as mpsa
+
     plt.plot(-pos, order_param, '.', label='Data', markersize=1, alpha=1, mec='none')
-    plt.plot(-np.sort(pos), erf_one_interface(fit.params['order_param_sol'].value,
-                                             fit.params['order_param_liq'].value,
-                                             np.sort(pos),
-                                             fit.params['pos_interface'].value,
-                                             fit.params['sigma'].value,
-                                             erf_sign), label='Fit')
+    plt.plot(-np.sort(pos),
+             erf_one_interface(fit.params['order_param_sol'].value,
+                               fit.params['order_param_liq'].value, np.sort(pos),
+                               fit.params['pos_interface'].value, fit.params['sigma'].value,
+                               erf_sign),
+             label='Fit')
+
     dy = 0.05*np.diff(plt.ylim())
     ydata = [plt.ylim()[0] + dy, plt.ylim()[1] - dy]
     plt.plot([interface_width/2, interface_width/2], ydata, 'k--')
     plt.plot([-interface_width/2, -interface_width/2], ydata, 'k--')
+
     mpsa.axis_setup('x')
     mpsa.axis_setup('y')
+
     plt.xlabel('$\\mathrm{Z - Z_{interface} \\left( \\AA \\right)}$',
                labelpad=mpsa.axeslabelpad)
     plt.ylabel('$\\mathrm{\\psi}$', labelpad=mpsa.axeslabelpad)
     plt.legend()
+
     mpsa.save_figure('garbage.png', res=300)
     plt.close()
 
 
 def fitting_erf_one_interface(pos, order_param, erf_sign, order_params_ini=[]):
+    """
+    Description
+    ----
+    Fit an error function for the order parameter as a function of interface normal position
+    (pos) for a single interface with the purpose of defining an interface width.
+
+    Inputs
+    ----
+    :pos: Array of position in the interface normal direction.
+    :order_param: Array of order parameters values corresponding to pos.
+    :erf_sign: Can be set to 1 or -1 depending on the relative locations of the solid and liquid
+               in the simulation box.
+    :order_params_ini: Optional. List of initial guesses for the average order parameter values in
+                       the solid and liquid. Can be specified in any order. The order parameter
+                       for the solid is assumed to be larger than in the liquid. If not specified,
+                       the max and min values of order_param are used as intial guesses in the solid
+                       and liquid, respectively.
+
+    Outputs
+    ----
+    :interface_width: Width of the interface defined as 2*sqrt(2)*erfinv(0.99)*sigma where sigma is
+                      the error function width parameter and erfinv is the inverse error function.
+    """
 
     wghts = np.ones(len(pos))  # All weights equal
     params = lmfit.Parameters()
@@ -362,7 +410,7 @@ def fitting_erf_one_interface(pos, order_param, erf_sign, order_params_ini=[]):
     pos_min = np.min(pos)
     delta_pos = np.max(pos) - pos_min
 
-    if len(order_params_ini) == 0:
+    if not order_params_ini:
         order_param_sol_ini = np.max(order_param)
         order_param_liq_ini = np.min(order_param)
         params.add('order_param_sol', value=order_param_sol_ini, min=0.0)
@@ -377,7 +425,7 @@ def fitting_erf_one_interface(pos, order_param, erf_sign, order_params_ini=[]):
            (order_param_liq_ini - order_param_sol_ini)
     fsol = 1 - fliq
 
-    pos_interface = delta_pos*((fliq/2)*(erf_sign==1) + (fsol/2)*(erf_sign==-1)) + pos_min
+    pos_interface = delta_pos*((fliq/2)*(erf_sign == 1) + (fsol/2)*(erf_sign == -1)) + pos_min
     params.add('pos_interface', value=pos_interface)
 
     params.add('sigma', value=5.0, min=0.0)
@@ -399,6 +447,31 @@ def fitting_erf_one_interface(pos, order_param, erf_sign, order_params_ini=[]):
 
 def erf_two_interface(order_param_sol, order_param_liq, pos, pos_interface_lower,
                       pos_interface_upper, sigma_lower, sigma_upper, erf_sign):
+    """
+    Description
+    ----
+    Evaluate a set of error functions for the order parameter as a function of interface
+    normal position (pos) for both interfaces. Switches from 1 error function to the other half
+    way betweeen the interfaces.
+
+    Inputs
+    ----
+    :order_param_sol: Parameter for average order parameter in solid phase. Same for upper & lower.
+    :order_param_sol: Parameter for average order parameter in liquid phase. Same for upper & lower.
+    :pos: Array of position in the interface normal direction.
+    :pos_interface_lower: Parameter for average lower interface position in the
+                          interface normal direction.
+    :pos_interface_upper: Parameter for average upper interface position in the
+                          interface normal direction.
+    :sigma_lower: Width parameter for lower interface.
+    :sigma_upper: Width parameter for upper interface.
+    :erf_sign: Can be set to 1 or -1 depending on the relative locations of the solid and liquid
+               in the simulation box.
+
+    Outputs
+    ----
+    :order_param_fit: Array of values of the fitted function corresponding to pos.
+    """
 
     pos_bound = (pos_interface_lower + pos_interface_upper)/2.0
 
@@ -447,6 +520,34 @@ def residual_erf_two_interface(params, pos, order_param, wghts, erf_sign):
 
 
 def fitting_erf_two_interface(pos, order_param, erf_sign, order_params_ini=[]):
+    """
+    Description
+    ----
+    Fit a set of error functions for the order parameter as a function of interface normal position
+    (pos) for both interfaces.
+
+    Inputs
+    ----
+    :pos: Array of position in the interface normal direction.
+    :order_param: Array of order parameters values corresponding to pos.
+    :erf_sign: Can be set to 1 or -1 depending on the relative locations of the solid and liquid
+               in the simulation box.
+    :order_params_ini: Optional. List of initial guesses for the average order parameter values in
+                       the solid and liquid. Can be specified in any order. The order parameter
+                       for the solid is assumed to be larger than in the liquid. If not specified,
+                       the max and min values of order_param are used as intial guesses in the solid
+                       and liquid, respectively.
+
+    Outputs
+    ----
+    :crossover: Value of the order parameter half way between the average values in the
+                solid and liquid phases.
+    :interface_widths: Widths of each interface defined as 2*sqrt(2)*erfinv(0.99)*sigma where
+                       sigma is the error function width parameter and erfinv is the
+                       inverse error function.
+    :[order_param_sol, order_param_liq]: A list containing the average values of the
+                                         order parameter in the solid and liquid phases.
+    """
 
     wghts = np.ones(len(pos))  # All weights equal
     params = lmfit.Parameters()
@@ -454,7 +555,7 @@ def fitting_erf_two_interface(pos, order_param, erf_sign, order_params_ini=[]):
     pos_min = np.min(pos)
     delta_pos = np.max(pos) - pos_min
 
-    if len(order_params_ini) == 0:
+    if not order_params_ini:
         order_param_sol_ini = np.max(order_param)
         order_param_liq_ini = np.min(order_param)
         params.add('order_param_sol', value=order_param_sol_ini, min=0.0)
@@ -469,10 +570,10 @@ def fitting_erf_two_interface(pos, order_param, erf_sign, order_params_ini=[]):
            (order_param_liq_ini - order_param_sol_ini)
     fsol = 1 - fliq
 
-    pos_interface_lower_ini = delta_pos*((fliq/2)*(erf_sign==1) + \
-                                         (fsol/2)*(erf_sign==-1)) + pos_min
-    pos_interface_upper_ini = delta_pos*((1 - fliq/2)*(erf_sign==1) + \
-                                         (1 - fsol/2)*(erf_sign==-1)) + pos_min
+    pos_interface_lower_ini = delta_pos*((fliq/2)*(erf_sign == 1) + \
+                                         (fsol/2)*(erf_sign == -1)) + pos_min
+    pos_interface_upper_ini = delta_pos*((1 - fliq/2)*(erf_sign == 1) + \
+                                         (1 - fsol/2)*(erf_sign == -1)) + pos_min
     params.add('pos_interface_lower', value=pos_interface_lower_ini)
     params.add('pos_interface_upper', value=pos_interface_upper_ini)
 
@@ -506,6 +607,42 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
                            vectors_ref, tree_ref, X, Y, Z, smoothing_cutoff,
                            interface_options, outfile_prefix, crossover=None,
                            reduce_flag=True, interface_range=None):
+    """
+    Description
+    ----
+    Interface positions for a 2D interface.
+
+    Inputs
+    ----
+    :frame_num: Frame number.
+    :coords: Array of atom coordinates.
+    :box_sizes: Array of simulation box sizes.
+    :n_neighbors: Number of nearest neighbors to consider in order parameter calculation.
+    :latparam: Lattice parameter.
+    :tree_ref: k-d tree of vectors from a single atom to its nearest neighbors in the
+               reference structure.
+    :X: Grid positions.
+    :Y: Grid positions.
+    :Z: Grid positions.
+    :smoothing_cutoff: Cutoff for smoothing phi order parameter to obtain psi order parameter.
+    :outfile_prefix: Prefix for output files with phi data, psi data, and crossover.
+    :crossover: Value of the order parameter half way between the average values in the
+                solid and liquid phases. Default is None.
+                If None, then it is computed using error function fits.
+    :reduce_flag: Reduce the domain for calculating order parameters to only near the
+                  regions near interfaces to save time? Currently only works with interfaces which
+                  are stationary on average (interfacial free energy calculation). Default is True.
+    :interface_range: Ranges defining where to compute order parameters.
+                      Default is None since it is calculated and output to a file for the
+                      first frame even if reduce_flag is True.
+                      Then those values can be used in subsequent frames if reduce_flag is True.
+
+    Outputs
+    ----
+    :height: Interface positions in the interface normal direction.
+    :interface_widths: Non-intrinsic interface widths.
+    :interface_widths_local: Intrinsic interface widths.
+    """
 
     natoms = coords.shape[0]
     nx_grid = X.shape[0]
@@ -580,7 +717,8 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
     del dist, tree
 
     # psi
-    psi = (np.sum(wd*phi[ii], axis=1)/np.sum(wd, axis=1)).reshape(nx_grid, ny_grid, nz_grid)/(latparam**2)
+    psi = (np.sum(wd*phi[ii], axis=1)/np.sum(wd, axis=1)).reshape(nx_grid, ny_grid,
+                                                                  nz_grid)/(latparam**2)
     del wd, ii
 
     # Save phi and psi from 1st frame and 1 grid point for plotting and testing
@@ -653,7 +791,8 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
                 height[:, :, :] = -1
                 break
 
-        if np.mean(height) == -1: break
+        if np.mean(height) == -1:
+            break
 
     # Local interface widths by fitting to error functions
     if (reduce_flag and frame_num == 0) or not reduce_flag:
@@ -700,6 +839,18 @@ def interface_positions_2D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
 
 
 def interface_range_2D(height, smoothing_cutoff, latparam, outfile_prefix):
+    """
+    Description
+    ----
+    Estimated range of interface normal positions around the interface to
+    calculate the order parameter in. Does not work for moving interfaces.
+    This is used on the first frame if only the parts of the system near interfaces are
+    considered for order parameter calculation.
+    The values are written to a file and can be used for subsequent frames.
+
+    Inputs
+    ----
+    """
 
     hmin = np.min(np.min(height, axis=0), axis=0)
     hmax = np.max(np.max(height, axis=0), axis=0)
@@ -714,6 +865,39 @@ def interface_range_2D(height, smoothing_cutoff, latparam, outfile_prefix):
 def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, latparam,
                            vectors_ref, tree_ref, X, Z, smoothing_cutoff, interface_options,
                            outfile_prefix, crossover=None, reduce_flag=True):
+    """
+    Description
+    ----
+    Interface positions for a quasi-1D interface.
+
+    Inputs
+    ----
+    :frame_num: Frame number.
+    :coords: Array of atom coordinates.
+    :box_sizes: Array of simulation box sizes.
+    :snapshot: mdtraj trajectory object.
+    :n_neighbors: Number of nearest neighbors to consider in order parameter calculation.
+    :latparam: Lattice parameter.
+    :tree_ref: k-d tree of vectors from a single atom to its nearest neighbors in the
+               reference structure.
+    :X: Grid positions.
+    :Y: Grid positions.
+    :Z: Grid positions.
+    :smoothing_cutoff: Cutoff for smoothing phi order parameter to obtain psi order parameter.
+    :outfile_prefix: Prefix for output files with phi data, psi data, and crossover.
+    :crossover: Value of the order parameter half way between the average values in the
+                solid and liquid phases. Default is None.
+                If None, then it is computed using error function fits.
+    :reduce_flag: Reduce the domain for calculating order parameters to only near the
+                  regions near interfaces to save time? Currently only works with interfaces which
+                  are stationary on average (interfacial free energy calculation). Default is True.
+
+    Outputs
+    ----
+    :height: Interface positions in the interface normal direction.
+    :interface_widths: Non-intrinsic interface widths.
+    :interface_widths_local: Intrinsic interface widths.
+    """
 
     natoms = snapshot.n_atoms
     nx_grid = X.shape[0]
@@ -790,7 +974,8 @@ def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
     # Weights for smoothing. Give points beyond cutoff a zero weight.
     wd = ((1.0 - (dist/smoothing_cutoff)**2)**2)*dist*(dist < smoothing_cutoff)
     del dist
-    if not interface_options['interface_flag']: del tree_xz
+    if not interface_options['interface_flag']:
+        del tree_xz
 
     # psi
     psi = (np.sum(wd*phi[ii], axis=1)/np.sum(wd, axis=1)).reshape(nx_grid, nz_grid)/(latparam**2)
@@ -850,10 +1035,12 @@ def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
         hmin = np.min(height, axis=0)
         hmax = np.max(height, axis=0)
         try:
-            interface_positions_1D.hrng_half = max(interface_positions_1D.hrng_half,
-                                                   1.6*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam)
+            interface_positions_1D.hrng_half = \
+                max(interface_positions_1D.hrng_half,
+                    1.6*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam)
         except AttributeError:
-            interface_positions_1D.hrng_half = 1.6*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam
+            interface_positions_1D.hrng_half = \
+                1.6*np.max(hmax - hmin)/2.0 + smoothing_cutoff + 2.0*latparam
 
         hmean = np.mean(height, axis=0)
 
@@ -868,6 +1055,21 @@ def interface_positions_1D(frame_num, coords, box_sizes, snapshot, n_neighbors, 
 
 
 def a_squared(dimension, height):
+    """
+    Description
+    ----
+    Fourier transform (FFT) of interface position - mean interface position in the
+    interface normal direction.
+
+    Inputs
+    ----
+    :dimension: Dimension of interfaces. 1 for quasi-1D and 2 for 2D.
+    :height: Array of interface positions in the interface normal direction.
+
+    Outputs
+    ----
+    :asq: Absolute value squared of FFT values, normalized.
+    """
 
     if dimension == 1:
 
@@ -875,7 +1077,7 @@ def a_squared(dimension, height):
         height -= np.mean(height, axis=0)
 
         # Compute A^2 for each interface
-        Asq = np.abs(np.fft.rfft(height, axis=0)/height.shape[0])**2
+        asq = np.abs(np.fft.rfft(height, axis=0)/height.shape[0])**2
 
 
     elif dimension == 2:
@@ -884,6 +1086,6 @@ def a_squared(dimension, height):
         height -= np.mean(np.mean(height, axis=0), axis=0)
 
         # Compute A^2 for each interface
-        Asq = np.abs(np.fft.fft2(height, axes=[0, 1])/np.product(height.shape[:2]))**2.0
+        asq = np.abs(np.fft.fft2(height, axes=[0, 1])/np.product(height.shape[:2]))**2.0
 
-    return Asq
+    return asq

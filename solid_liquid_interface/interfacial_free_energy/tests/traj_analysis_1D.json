@@ -13,16 +13,11 @@
         "traj_flag": false,
         "conc_flag": false,
         "free_boundaries": false,
-        "algorithm": "nearest",
         "r_atoms": {
             "Ti": 1.439725
         },
         "n_layers": 13,
-        "nbins_per_layer": 3,
-        "ITIM": {
-            "r_probe": 1.439725,
-            "grid_spacing": 0.12
-        }
+        "nbins_per_layer": 3
     },
     "nthreads": 4
 }
