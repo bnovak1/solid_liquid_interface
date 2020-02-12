@@ -1086,6 +1086,7 @@ def a_squared(dimension, height):
         height -= np.mean(np.mean(height, axis=0), axis=0)
 
         # Compute A^2 for each interface
-        asq = np.abs(np.fft.fft2(height, axes=[0, 1])/np.product(height.shape[:2]))**2.0
+        asq = np.abs(np.fft.fftshift(np.fft.fft2(height, axes=[0, 1]))/ \
+                     np.product(height.shape[:2]))**2.0
 
     return asq

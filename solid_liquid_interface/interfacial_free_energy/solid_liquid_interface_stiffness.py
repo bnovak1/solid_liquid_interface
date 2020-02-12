@@ -222,8 +222,10 @@ def main(infile):
 
         Asq_mean = np.mean(Asq, axis=0)
 
-        kxsq = (2.0*np.pi*np.arange(nx_grid)/box_sizes[0][0])**2
-        kysq = (2.0*np.pi*np.arange(ny_grid)/box_sizes[0][1])**2
+        kxsq = (nx_grid*np.fft.fftshift(np.fft.fftfreq(nx_grid))*2.0*np.pi/box_sizes[0][0])**2
+        kysq = (ny_grid*np.fft.fftshift(np.fft.fftfreq(ny_grid))*2.0*np.pi/box_sizes[0][1])**2
+        # kxsq = (2.0*np.pi*np.arange(nx_grid)/box_sizes[0][0])**2
+        # kysq = (2.0*np.pi*np.arange(ny_grid)/box_sizes[0][1])**2
 
     # Interface area
     area = np.product(box_sizes[0][:2])
@@ -247,7 +249,11 @@ def main(infile):
         outdata = np.column_stack((kxsq_grid.flatten(), kysq_grid.flatten(),
                                    Asq_inv[:, :, 0].flatten(),
                                    Asq_inv[:, :, 1].flatten()))
-        np.savetxt(outfile_prefix + '_data.dat', outdata[1:, :],
+        outdata = outdata[np.lexsort((outdata[:, 0], outdata[:, 1]))] #sort by k values
+        outdata = outdata[:, [0, 1, 3, 2]] # Last two columns swapped back after sort
+        outdata = outdata[1:, :] #Throw away point where both k values are 0
+        outdata = outdata[::2, :] # Remove duplicates
+        np.savetxt(outfile_prefix + '_data.dat', outdata,
                    header='kxsq (A^-2) | kysq (A^-2) | kT/(area*Asq) (mJ/m^2/A^2)')
 
     # Save concentrations to file
