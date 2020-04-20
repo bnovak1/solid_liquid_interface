@@ -5,7 +5,7 @@
     * Interface fluctuations needed for interfacial free energy calculation (quasi 1D or 2D interfaces)
     * Interface widths
     * Concentration profiles for multicomponent systems
-
+    
 # Limitations
 
 * Input is a LAMMPS format trajectory split into 1 frame per file
@@ -14,9 +14,11 @@
 
 # Background
 
+Details are in reference 1.
+
 ## Order parameter to distinguish solid and liquid phases
 
-FILL
+See references 1-3.
 
 ## Kinetic coefficient from free solidification simulations
 
@@ -51,3 +53,12 @@ Due to the large number of options, a JSON input file is used. Below is a descri
     * n_layers: Number of layers to consider for concentration profiles. Since the central layer is centered on the interface, this must be an odd number. Each layer has a width of layer_width. Only needed if conc_flag is true.
     * nbins_per_layer: Number of overlapping bins per layer. For example if you have 3 bins per layer, then each layer contributes to 3 overlapping bins.
 * nthreads: Number of threads to use. This number of trajectory frames will be analyzed in parallel, so you may need to be careful not to use too much RAM.
+
+# References
+
+1. Kavousi, S.; Novak, B. R.; Zaeem, M. A.; Moldovan, D. Combined Molecular Dynamics and Phase Field Simulation Investigations of Crystal-Melt Interfacial Properties and Dendritic Solidification of Highly Undercooled Titanium. Comput. Mater. Sci. 2019, 163, 218–229. https://doi.org/10.1016/j.commatsci.2019.03.024.
+2. Sun, D. Y.; Asta, M.; Hoyt, J. J. Kinetic Coefficient of Ni Solid-Liquid Interfaces from Molecular-Dynamics Simulations. Physical Review B 2004, 69 (2). https://doi.org/10.1103/PhysRevB.69.024108.
+3. Asadi, E.; Asle Zaeem, M.; Nouranian, S.; Baskes, M. I. Quantitative Modeling of the Equilibration of Two-Phase Solid-Liquid Fe by Atomistic Simulations on Diffusive Time Scales. Phys. Rev. B 2015, 91 (2), 024105. https://doi.org/10.1103/PhysRevB.91.024105.
+
+
+
