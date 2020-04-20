@@ -14,6 +14,10 @@
 
 # Background
 
+## Order parameter to distinguish solid and liquid phases
+
+FILL
+
 ## Kinetic coefficient from free solidification simulations
 
 FILL
