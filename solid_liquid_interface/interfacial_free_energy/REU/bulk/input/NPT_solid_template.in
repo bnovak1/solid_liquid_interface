@@ -1,0 +1,43 @@
+log             ../output/[POTENTIAL]/solid/NPT.log
+
+units           metal
+atom_style      atomic
+
+include         lmp_infiles/[POTENTIAL]/crystal.in
+create_box      1 box
+create_atoms    1 box
+
+include         lmp_infiles/[POTENTIAL]/potential.in
+
+neigh_modify    delay 0 check yes
+
+variable        temp equal [TEMPERATURE]
+
+velocity        all create ${temp} 1876167 dist gaussian
+
+timestep        0.002
+
+# equilibrate for about 50 ps
+fix             npt all npt temp ${temp} ${temp} 0.1 aniso 0.0 0.0 1.0
+
+variable        nstepseq equal round(50/dt)
+run             ${nstepseq}
+
+# production for about 300 ps
+variable        energy equal 96485.33212331001*pe/count(all) # Convert eV/atom to J/mol
+variable        molarvol equal 6.02214076e-7*vol/count(all)  # Convert angstroms^3/atom to m^3/mol
+thermo          30
+thermo_style    custom time v_energy v_molarvol pe
+
+variable        nstepsprod equal round(300/dt)
+variable        nstepsrestart equal round(${nstepsprod}/10)
+variable        nstepstraj equal round(${nstepsprod}/1000)
+
+dump            traj all atom ${nstepstraj} ../output/[POTENTIAL]/solid/NPT.lammpstrj
+
+restart         ${nstepsrestart} ../output/[POTENTIAL]/solid/NPT.restart &
+                                 ../output/[POTENTIAL]/solid/NPT.restart
+
+run             ${nstepsprod}
+
+write_data      ../output/[POTENTIAL]/solid/NPT.data

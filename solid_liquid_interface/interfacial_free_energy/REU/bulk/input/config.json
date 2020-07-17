@@ -1,0 +1,155 @@
+{
+    "POTENTIALS": [
+        "Al-MDSL",
+        "Ag_ATVFP",
+        "Ag_WMH",
+        "Al1",
+        "Al1p",
+        "Al1pp",
+        "Al1ppp",
+        "Al_MSAHM",
+        "Cu1",
+        "Cu_AFW",
+        "Cu_FBD",
+        "Cu_MMPVK",
+        "Cu_WMH",
+        "Fe_ABCHbcc",
+        "Fe_ABCHfcc",
+        "Fe_MHSA2",
+        "Na1",
+        "Na2",
+        "Na3",
+        "Ni1",
+        "Ni_AFW",
+        "Ni_FBD",
+        "Ni_Foi",
+        "Ni_SMF",
+        "Ru_Wil",
+        "U_HLWTRX",
+        "Zr3"
+    ],
+    "TEMPERATURES": {
+        "Al-MDSL": 931.0,
+        "Ag_ATVFP": 1268.4,
+        "Ag_WMH": 1269.8,
+        "Al1": 925.0,
+        "Al1p": 534.0,
+        "Al1pp": 937.0,
+        "Al1ppp": 932.0,
+        "Al_MSAHM": 940.0,
+        "Cu1": 1353.0,
+        "Cu_AFW": 1314.4,
+        "Cu_FBD": 1279.0,
+        "Cu_MMPVK": 1323.78,
+        "Cu_WMH": 1327.0,
+        "Fe_ABCHbcc": 2358.0,
+        "Fe_ABCHfcc": 2236.0,
+        "Fe_MHSA2": 1772.0,
+        "Na1": 366.0,
+        "Na2": 377.0,
+        "Na3": 376.0,
+        "Ni1": 1728.0,
+        "Ni_AFW": 1820.0,
+        "Ni_FBD": 1714.0,
+        "Ni_Foi": 1778.4,
+        "Ni_SMF": 1820.0,
+        "Ru_Wil": 1792.0,
+        "U_HLWTRX": 1524.0,
+        "Zr3": 1363.0
+    },
+    "PHASES": {
+        "Al-MDSL": [
+            "liquid",
+            "solid"
+        ],
+        "Ag_ATVFP": [
+            "liquid",
+            "solid"
+        ],
+        "Ag_WMH": [
+            "liquid",
+            "solid"
+        ],
+        "Al1": [
+            "liquid"
+        ],
+        "Al1p": [
+            "liquid"
+        ],
+        "Al1pp": [
+            "liquid"
+        ],
+        "Al1ppp": [
+            "liquid"
+        ],
+        "Al_MSAHM": [
+            "liquid"
+        ],
+        "Cu1": [
+            "liquid"
+        ],
+        "Cu_AFW": [
+            "liquid",
+            "solid"
+        ],
+        "Cu_FBD": [
+            "liquid"
+        ],
+        "Cu_MMPVK": [
+            "liquid"
+        ],
+        "Cu_WMH": [
+            "liquid",
+            "solid"
+        ],
+        "Fe_ABCHbcc": [
+            "liquid"
+        ],
+        "Fe_ABCHfcc": [
+            "liquid"
+        ],
+        "Fe_MHSA2": [
+            "liquid"
+        ],
+        "Na1": [
+            "liquid"
+        ],
+        "Na2": [
+            "liquid"
+        ],
+        "Na3": [
+            "liquid",
+            "solid"
+        ],
+        "Ni1": [
+            "liquid"
+        ],
+        "Ni_AFW": [
+            "liquid",
+            "solid"
+        ],
+        "Ni_FBD": [
+            "liquid",
+            "solid"
+        ],
+        "Ni_Foi": [
+            "liquid",
+            "solid"
+        ],
+        "Ni_SMF": [
+            "liquid"
+        ],
+        "Ru_Wil": [
+            "liquid",
+            "solid"
+        ],
+        "U_HLWTRX": [
+            "liquid"
+        ],
+        "Zr3": [
+            "liquid",
+            "solid"
+        ]
+    },
+    "CODE_DIRECTORY": "/home/bnovak1/CODE/Work/SIMULATIONS/CIMM/solid_liquid_interface/interfacial_free_energy/REU/bulk/"
+}

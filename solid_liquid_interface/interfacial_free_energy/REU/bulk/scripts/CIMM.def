@@ -1,0 +1,160 @@
+BootStrap: docker
+From: ubuntu:18.04
+
+%labels
+brian.novak.simulation@gmail.com 20200609
+
+%environment
+export LC_ALL=C
+
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lammps/src/
+export LD_LIBRARY_PATH=/usr/local/miniconda3/lib:$LD_LIBRARY_PATH
+export PYTHONPATH=$PYTHONPATH:/usr/local/lammps/python/
+
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/usr/local/miniconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/usr/local/miniconda3/etc/profile.d/conda.sh" ]; then
+        . "/usr/local/miniconda3/etc/profile.d/conda.sh"
+    else
+        export PATH="/usr/local/miniconda3/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+
+%files
+# Login for download required. Download these manually before build.
+vmd-1.9.3.bin.LINUXAMD64-CUDA8-OptiX4-OSPRay111p1.opengl.tar.gz
+
+%post
+
+# Ubuntu packages
+apt-get update
+apt-get install -y software-properties-common wget ssh gcc g++ git cmake libopenmpi-dev \
+                   bc libqt5x11extras5 xorg freeglut3-dev mesa-utils tcsh gnuplot \
+                   imagemagick nano gfortran trash-cli subversion lsof tcllib
+
+# Python 3 packages with conda and pip
+wget https://repo.anaconda.com/miniconda/Miniconda3-4.5.12-Linux-x86_64.sh
+bash Miniconda3-4.5.12-Linux-x86_64.sh -b -p /usr/local/miniconda3
+rm Miniconda3-4.5.12-Linux-x86_64.sh
+
+export PATH="/usr/local/miniconda3/bin:$PATH"
+
+conda update conda
+conda update pip
+
+conda config --append channels conda-forge
+conda config --append channels bioconda
+
+conda install -y snakemake=5.5.4 \
+                 cython=0.29.12 \
+                 ipython=7.7.0 \
+                 joblib=0.13.2 \
+                 lmfit=0.9.13 \
+                 matplotlib=3.1.0 \
+                 mdanalysis=0.19.2 \
+                 mdtraj=1.9.3 \
+                 pylint=2.3.1 \
+                 sympy=1.4 \
+                 scipy=1.2.0 \
+                 pmda=0.2.1 \
+                 xlrd=1.2.0 \
+                 filelock=3.0.12 \
+                 h5py=2.10.0
+conda install -y -c pycalphad -c msys2 -c conda-forge pycalphad
+conda install -y -c https://conda.ovito.org -c conda-forge ovito
+pip install arch==4.11 \
+            atsim.potentials==0.2.1 \
+            pymannkendall==1.2 \
+            mmappickle==1.0.0 \
+            mpi4py==3.0.3
+
+conda clean -t -y
+rm -r /usr/local/miniconda3/lib/python3.7/__pycache__
+
+# Atom Simulation Environment with modified minima hopping
+# cd /usr/local
+# git clone git@gitlab.com:bnovak1/ase.git
+# cd -
+
+# LAMMPS with python
+lammps_version=3Mar20
+wget https://lammps.sandia.gov/tars/lammps-${lammps_version}.tar.gz
+tar -zxf lammps-${lammps_version}.tar.gz
+
+cd lammps-${lammps_version}
+mkdir build
+cd build
+
+cmake -D CMAKE_INSTALL_PREFIX=/usr/local \
+      -D BUILD_MPI=on \
+      -D PKG_MANYBODY=on \
+      -D PKG_MC=on \
+      -D PKG_MISC=on \
+      -D PKG_OPT=on \
+      -D PKG_PYTHON=on \
+      -D PYTHON_EXECUTABLE=/usr/local/miniconda3/bin/python \
+      -D BUILD_LIB=on \
+      -D BUILD_SHARED_LIBS=on \
+      -D PKG_REPLICA=on \
+      -D PKG_RIGID=on \
+      -D PKG_USER-MEAMC=on \
+      -D PKG_USER-MISC=on \
+      -D PKG_USER-OMP=on \
+      -D PKG_USER-PTM=on \
+      ../cmake
+
+make -j
+
+make install
+
+cd ..
+rm -r build
+cd ..
+mv lammps-${lammps_version}/ /usr/local/lammps
+rm lammps-${lammps_version}.tar.gz
+
+# VMD
+tar xf vmd-1.9.3.bin.LINUXAMD64-CUDA8-OptiX4-OSPRay111p1.opengl.tar.gz
+cd vmd-1.9.3
+./configure
+cd src
+make install
+cd ../..
+rm -r vmd-1.9.3*
+cd /lib/x86_64-linux-gnu
+ln -s -n libexpat.so.1 libexpat.so.0
+cd -
+
+# Packmol
+wget https://github.com/leandromartinez98/packmol/archive/20.010.tar.gz
+tar zxf 20.010.tar.gz
+cd packmol-20.010/
+make
+mv packmol /usr/local/bin
+cd ..
+rm -r 20.010.tar.gz packmol-20.010
+
+# Atom editor
+wget -qO - https://packagecloud.io/AtomEditor/atom/gpgkey | apt-key add -
+sh -c 'echo "deb [arch=amd64] https://packagecloud.io/AtomEditor/atom/any/ any main" > /etc/apt/sources.list.d/atom.list'
+apt update
+apt install -y atom
+
+# conda install mpi4py gxx_linux-64
+
+# GPAW
+apt install -y libxc-dev libscalapack-mpi-dev gcc-multilib g++-multilib
+mkdir -p ~/.gpaw
+config=~/.gpaw/siteconfig.py
+echo "fftw = True" > $config
+echo "scalapack = True" >> $config
+echo "libraries = ['xc', 'blas', 'fftw3', 'scalapack-openmpi']" >> $config
+echo "include_dirs += ['/usr/lib/x86_64-linux-gnu/openmpi/include', '/usr/local/include', '/usr/local/miniconda3/include']" >> $config
+echo y | gpaw install-data /usr/local
