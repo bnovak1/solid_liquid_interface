@@ -38,8 +38,20 @@ class InterfacialFreeEnergyFit:
 
     # def fit_bcc(self):
     #
-    # def fit_fcc(self):
-    #
+    def fit_fcc(self):
+        '''
+        Fit only to fcc data
+        '''
+
+        ind = self._data['Structure'] == 'fcc'
+        self._fit_data = self._fit_Kaptay(ind)
+
+        with open('../results/fit_fcc.json', 'w') as jf:
+            json.dump(self._fit_data, jf, indent=4)
+
+        self._plot_fit('../results/fit_fcc.png', self._data['Type'][ind])
+        self._compare_Kaptay('../results/RMSE_compare_Kaptay_fcc.csv')
+
     def fit_exp(self):
         '''
         Fit only to experimental data
@@ -84,12 +96,15 @@ class InterfacialFreeEnergyFit:
     def _compile_fit_data(self, x, y, results):
         return {'x': x.tolist(), 'y': y.tolist(), 'y_predict': results.predict(x).tolist(),
                 'parameters': {'mean': results.params.to_list(),
-                               'uncertainty': np.diff(results.conf_int()).tolist(),
+                               'uncertainty': (np.diff(results.conf_int())/2).tolist(),
                                'covariance': np.array(results.cov_params()).tolist()},
                 'rsq': results.rsquared,
                 'AIC': results.aic}
 
     def _plot_fit(self, outfile, color_col=[]):
+        '''
+        Plot fit versus predicted
+        '''
 
         if len(color_col) == 0:
             plt.plot(self._fit_data['y'], self._fit_data['y_predict'], 'o', mfc='none')
@@ -109,3 +124,18 @@ class InterfacialFreeEnergyFit:
 
         mpsa.save_figure(outfile, 300)
         plt.close()
+
+    def _compare_Kaptay(self, outfile):
+        '''
+        Root mean squared prediction error compared with Kaptay parameter values
+        '''
+
+        rmse = np.sqrt(np.mean((np.array(self._fit_data['y']) - \
+                                np.array(self._fit_data['y_predict']))**2))
+
+        y_Kaptay = np.sum(np.array([0.5, 0.173])*np.array(self._fit_data['x']), axis=1)
+        rmse_Kaptay = np.sqrt(np.mean((self._fit_data['y'] - y_Kaptay)**2))
+
+        outdata = pd.DataFrame(np.array([rmse, rmse_Kaptay]).reshape(1, 2),
+                               columns=['RMSE', 'RMSE Kaptay'])
+        outdata.to_csv(outfile, index=False)
